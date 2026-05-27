@@ -1,0 +1,55 @@
+n,k_n,vertex_skipping,s_n,angle_str,tension_state,angle_rad,angle_deg,is_hex_resonance,is_max_tense,is_phase_shift,is_multiple_placements,is_minimally_tense,uses_skipping,s_simple,s_refined
+3,3,No,0,π/3,Minimally Tense,1.0471975511965976,60.0,False,False,False,False,True,False,0,0
+4,4,No,0,π/2,Normal,1.5707963267948966,90.0,False,False,False,False,False,False,0,0
+5,5,No,0,3π/5,Normal,1.8849555921538759,108.0,False,False,False,False,False,False,0,0
+6,6,No,0,2π/3,Normal,2.0943951023931953,120.0,True,False,False,False,False,False,0,0
+7,4,Yes,1,5π/7,Normal,2.243994752564138,128.57142857142858,False,False,False,False,False,True,0,0
+8,4,Yes,1,3π/4,Normal,2.356194490192345,135.0,False,False,False,False,False,True,0,0
+9,4,Yes,1,7π/9,Normal,2.443460952792061,140.0,False,False,False,False,False,True,0,0
+10,5,Yes,1,4π/5,Normal,2.5132741228718345,144.0,False,False,False,False,False,True,0,0
+11,5,Yes,1,9π/11,Normal,2.5703939893007397,147.27272727272728,False,False,False,False,False,True,0,0
+12,6,No,0,5π/6,Normal,2.6179938779914944,150.0,True,False,False,False,False,False,1,0
+13,4,Yes,1,11π/13,Maximally Tense,2.6582707068836706,152.30769230769232,False,True,False,False,False,True,1,1
+14,4,Yes,2,6π/7,Normal,2.6927937030769655,154.28571428571428,False,False,False,False,False,True,1,1
+15,5,Yes,2,13π/15,Normal,2.7227136331111543,156.0,False,False,False,False,False,True,1,1
+16,5,Yes,2,7π/8,Normal,2.748893571891069,157.5,False,False,False,False,False,True,1,1
+17,5,Yes,2,15π/17,Normal,2.7719935178733466,158.8235294117647,False,False,False,False,False,True,1,1
+18,6,Yes,1,8π/9,Maximally tense,2.792526803190927,160.0,True,True,False,False,False,True,2,1
+19,4,Yes,2,17π/19,Normal,2.810898690054026,161.05263157894737,False,False,False,False,False,True,2,2
+20,5,Yes,2,9π/10,Normal,2.827433388230814,162.0,False,False,False,False,False,True,2,2
+21,5,Yes,2,19π/21,Normal,2.8423933532479078,162.85714285714286,False,False,False,False,False,True,2,2
+22,5,Yes,2,10π/11,Normal,2.8559933214452666,163.63636363636363,False,False,False,False,False,True,2,2
+23,5,Yes,2,21π/23,Normal,2.86841068371242,164.34782608695653,False,False,False,False,False,True,2,2
+24,6,Yes,2,11π/12,Maximally Tense,2.8797932657906435,165.0,True,True,False,False,False,True,3,2
+25,5,Yes,2,23π/25,Normal,2.8902652413026093,165.6,False,False,False,False,False,True,3,3
+26,5,Yes,2,12π/13,Normal,2.8999316802367323,166.15384615384616,False,False,False,False,False,True,3,3
+27,5,Yes,3,25π/27,Normal,2.908882086657216,166.66666666666666,False,False,False,False,False,True,3,3
+28,5,Yes,3,13π/14,Normal,2.9171931783333798,167.14285714285714,False,False,False,False,False,True,3,3
+29,5,Yes,3,27π/29,Normal,2.9249310912732556,167.58620689655172,False,False,False,False,False,True,3,3
+30,6,Yes,3,14π/15,Maximally Tense (Hexagonal Resonance),2.9321531433504737,168.0,True,True,False,False,False,True,4,3
+31,5,Yes,4,29π/31,Normal,2.938909256584,168.38709677419354,False,False,False,False,False,True,4,4
+32,5,Yes,4,15π/16,Normal,2.945243112740431,168.75,False,False,False,False,False,True,4,4
+33,5,Yes,4,31π/33,Normal,2.951193098826775,169.0909090909091,False,False,False,False,False,True,4,4
+34,5,Yes,4,32π/34,Multiple Placements (2),2.95679308573157,169.41176470588235,False,False,False,True,False,True,4,4
+35,5,Yes,4,33π/35,Multiple Placements (2),2.962073073384662,169.71428571428572,False,False,False,True,False,True,4,4
+36,6,Yes,4,34π/36,Maximally Tense,2.9670597283903604,170.0,True,True,False,False,False,True,5,4
+37,5,Yes,5,35π/37,Multiple Placements (2),2.9717768344768314,170.27027027027026,False,False,False,True,False,True,5,5
+38,5,Yes,5,36π/38,Multiple Placements (2),2.9762456718219092,170.52631578947367,False,False,False,True,False,True,5,5
+39,5,Yes,5,37π/39,Multiple Placements (2),2.980485338021086,170.76923076923077,False,False,False,True,False,True,5,5
+40,5,Yes,5,38π/40,Multiple Placements (2),2.9845130209103035,171.0,False,False,False,True,False,True,5,5
+41,5,Yes,5,39π/41,Multiple Placements (2),2.988344231463462,171.21951219512195,False,False,False,True,False,True,5,5
+42,6,Yes,5,40π/42,"Maximally tense, symmetric",2.9919930034188504,171.42857142857142,True,True,False,False,False,True,6,5
+43,5,Yes,6,41π/43,"Minimally Tense, Multiple Placements (2)",2.9954720650507327,171.62790697674419,False,False,False,True,True,True,6,6
+44,5,Yes,6,42π/44,Multiple Placements (2),2.99879298751753,171.8181818181818,False,False,False,True,False,True,6,6
+45,5,Yes,6,43π/45,Multiple Placements (2),3.0019663134302466,172.0,False,False,False,True,False,True,6,6
+46,5,Yes,6,44π/46,Multiple Placements (2),3.005001668651106,172.17391304347825,False,False,False,True,False,True,6,6
+47,5,Yes,6,45π/47,Multiple Placements (2),3.0079078598200146,172.3404255319149,False,False,False,True,False,True,6,6
+48,6,Yes,6,46π/48,"Maximally Tense, symmetric",3.010692959690218,172.5,True,True,False,False,False,True,7,6
+49,5,Yes,7,47π/49,Multiple Placements(2),3.0133643820146996,172.6530612244898,False,False,False,True,False,True,7,7
+50,5,Yes,7,48π/50,Multiple Placements (2),3.015928947446201,172.8,False,False,False,True,False,True,7,7
+51,5,Yes,7,49π/51,Multiple Placement (2),3.018392941684311,172.94117647058823,False,False,False,True,False,True,7,7
+52,5,Yes,7,50π/52,Multiple Placements(2),3.0207621669132627,173.07692307692307,False,False,False,True,False,True,7,7
+53,5,Yes,7,51π/53,Multiple Placements(2),3.0230419874165935,173.20754716981133,False,False,False,True,False,True,7,7
+54,6,Yes,7,52π/54,"Maximally Tense, symmetric",3.025237370123505,173.33333333333334,True,True,False,False,False,True,8,7
+55,5,Yes,8,53π/55,Multiple Placements(2),3.0273529207319827,173.45454545454547,False,False,False,True,False,True,8,8
+174,6,Yes,29,172π/174,Hexagonal Resonance,3.1054823932037037,177.93103448275863,True,False,False,False,False,True,28,29
