@@ -232,3 +232,61 @@ def test_partly_touching_example():
     p = pp._make(36, [0, 6, 12, 18, 24])                            # gaps 6,6,6,6,12
     assert p.gaps == (6, 6, 6, 6, 12) and p.kind == "partly touching"
     assert pp.verify_placement_geometry(36, p.edges)
+
+
+# --------------------------------------------------------------------------- tight chains with BA fixed
+def test_n34_has_three_chain_placements_including_both_uploaded_files():
+    chains = pp.chain_placements(34)
+    assert pp.count_chain(34) == len(chains) == 3
+    assert sorted((c.ahead, c.behind) for c in chains) == [(2, 2), (3, 1), (4, 0)]
+    edges = {c.placement.edges for c in chains}
+    assert (0, 6, 12, 18, 24) in edges            # 34_placement_1.ggb  (4+0)
+    assert (0, 6, 12, 18, 28) in edges            # 34_placement_2.ggb  (3+1)
+    assert (0, 6, 12, 22, 28) in edges            # symmetric about BA  (2+2)
+    for c in chains:
+        assert 0 in c.placement.edges and c.placement.kind == "open"
+        assert pp.is_valid(34, c.placement.edges) and pp.verify_placement_geometry(34, c.placement.edges)
+        assert c.pocket_untouched == 8 and sorted(c.placement.gaps) == [6, 6, 6, 6, 10]
+
+
+def test_chain_without_mirror_lists_both_orientations():
+    plain = pp.chain_placements(34, mirror=False)
+    assert len(plain) == pp.count_chain(34, mirror=False) == 5
+    assert sorted((c.ahead, c.behind) for c in plain) == [(0, 4), (1, 3), (2, 2), (3, 1), (4, 0)]
+
+
+def test_chain_placements_all_chain_and_closed_form_count():
+    for n in range(3, 130):
+        k, m = pp.max_size(n), pp.min_gap(n)
+        slack = n - k * m
+        for size in range(1, k + 1):
+            s_ = n - size * m
+            for mirror in (True, False):
+                ch = pp.chain_placements(n, size, mirror)
+                assert len(ch) == pp.count_chain(n, size, mirror), (n, size, mirror)
+                for c in ch:
+                    g = sorted(c.placement.gaps)
+                    assert 0 in c.placement.edges and pp.is_valid(n, c.placement.edges)
+                    assert g[:-1] == [m] * (size - 1) or size == 1       # all gaps tight but the pocket
+                    assert c.ahead + c.behind == size - 1 or s_ == 0 or size == 1
+        expected = 1 if slack == 0 else (k + 1) // 2
+        assert pp.count_chain(n) == expected, n
+
+
+def test_chain_placements_are_a_subset_of_all_anchored_placements():
+    for n in (7, 13, 25, 34, 41):
+        everything = {p.edges for p in pp.iter_placements(n, None, "none") if 0 in p.edges}
+        for c in pp.chain_placements(n, mirror=False):
+            assert c.placement.edges in everything
+
+
+def test_perfect_ring_is_a_single_chain_placement():
+    for m in range(1, 30):
+        ch = pp.chain_placements(6 * m)
+        assert len(ch) == 1 and ch[0].label == "ring"
+
+
+def test_chain_counts_by_k():
+    # slack > 0: k=3 -> 2, k=4 -> 2, k=5 -> 3
+    assert pp.count_chain(7) == 2 and pp.count_chain(9) == 2 and pp.count_chain(34) == 3 and pp.count_chain(55) == 3
+    assert pp.count_chain(36) == 1 and pp.count_chain(174) == 1

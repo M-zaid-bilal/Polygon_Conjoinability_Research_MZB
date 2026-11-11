@@ -63,6 +63,19 @@ gaps are all at least `m`. `Polygon_placements.py` counts and lists them: for n 
 476 largest placements (5 neighbours) with every edge labelled, 14 up to rotation, and 10 up to
 rotation and reflection. More than one distinct largest placement first appears at n = 14.
 
+#### Tight chains with BA fixed
+
+The placements counted in the research fix one neighbour on edge 0 (**BA**) and pack the others as
+tightly as possible: every gap equals the minimum `m` except one gap, the **pocket**, which takes all
+the slack. Walking from BA you meet `ahead` tight neighbours before the pocket and `behind` the other
+way round; mirror images count as one placement. For n = 34 (m = 6, five neighbours, pocket of 8
+untouched vertices) there are **three**: 4+0, 3+1 and 2+2 (edges 0,6,12,18,24 / 0,6,12,18,28 /
+0,6,12,22,28). The first two are the GeoGebra files `34_placement_1` and `34_placement_2`. They are
+rotations of one arrangement, which is why they count as different only once BA is fixed.
+
+In general a largest tight chain has `ceil(k/2)` placements when there is slack (so 2 for k = 3 or 4, and
+3 for k = 5) and exactly one, the perfect ring, when 6 divides n. The first n with more than one is n = 7.
+
 ## Data corrections
 
 An earlier version of the data contained entries that disagreed with the geometry
@@ -90,9 +103,9 @@ n = 174, and are left out of the dashboard's tension and isomer statistics.
 | File                                                                                  | What it is                                                                                                                                                                                                                                                |
 | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Polygon_solver.py`                                                                 | exact geometric solver for k(n) and s(n); also a command-line tool                                                                                                                                                                                        |
-| `Polygon_placements.py`                                                             | counts, lists and classifies **all valid placements** around a central n-gon (open or perfect ring); also a command-line tool                                                                                                                       |
+| `Polygon_placements.py`                                                             | counts, lists and classifies **all valid placements** around a central n-gon (open or perfect ring), including the tight chains with BA fixed; also a command-line tool                                                                             |
 | `test_polygon_solver.py`                                                            | pytest suite for the solver (23 tests)                                                                                                                                                                                                                    |
-| `test_polygon_placements.py`                                                        | pytest suite for the placements module (50 tests, including brute-force geometric cross-checks)                                                                                                                                                           |
+| `test_polygon_placements.py`                                                        | pytest suite for the placements module (56 tests, including brute-force geometric cross-checks)                                                                                                                                                           |
 | `Poly_Research.py`                                                                  | Streamlit dashboard: EDA, data cleaning, insights, nine plots (every chart lives here), **Geometric Solver** and **Placements** tabs                                                                                                          |
 | `requirements.txt`                                                                  | Python dependencies                                                                                                                                                                                                                                       |
 | `polygon_conjoinability_Sheet1.csv`                                                 | corrected table, n = 3 to 400, 14 columns                                                                                                                                                                                                                 |
@@ -133,10 +146,16 @@ s(n) against k(n), isomer emergence, formula analysis, an interactive 3D view, a
 against s(n) in degrees and radians). The **Geometric Solver** tab solves and draws any single n, checks the loaded dataset
 against the exact solver, and builds or extends the table (keeping existing tension labels).
 
-The **Placements** tab is interactive: enter n and the number of neighbours, choose whether rotations
-and reflections count as the same pattern, and browse every valid arrangement as a thumbnail grid,
-one large drawing (untouched vertices in red), and a table you can download. Each placement is
-labelled open or perfect ring, and a button re-checks the shown placements by exact geometry.
+The **Placements** tab is interactive. Enter n and the number of neighbours, then choose a mode:
+
+* **Tight chains with BA fixed** (default): the placements counted in the research, with BA drawn in
+  red, an `ahead+behind` label for each, and an option to list mirror images separately. An expander
+  compares the number of placements with the "Multiple Placements (N)" labels in the loaded data.
+* **All valid placements**: choose whether rotations and reflections count as the same pattern.
+
+Both modes show a thumbnail grid, one large drawing (untouched vertices in red), and a downloadable
+table. Each placement is labelled open or perfect ring, and a button re-checks the shown placements
+by exact geometry.
 
 ### Solver
 
@@ -159,6 +178,7 @@ Solving every n from 3 to 400 takes about 3 seconds on one core.
 ### Placements
 
 ```bash
+python Polygon_placements.py chains 34                      # tight chains with BA fixed: 4+0, 3+1, 2+2
 python Polygon_placements.py count 34                       # how many placements of each size
 python Polygon_placements.py list 34 --size 5 --symmetry dihedral --limit 10
 python Polygon_placements.py check --n-max 400              # re-verify the overlap rule by exact geometry
@@ -171,6 +191,8 @@ pp.count_classes(34, 5)                        # (14, 10): up to rotation, up to
 for p in pp.iter_placements(36, 6):            # lazy; use limit=... for huge spaces
     print(p.edges, p.gaps, p.kind)             # (0, 6, 12, 18, 24, 30) (6, 6, 6, 6, 6, 6) perfect ring
 pp.list_placements(34, 5, "dihedral", limit=10, order="balanced")
+[(c.label, c.placement.edges) for c in pp.chain_placements(34)]   # tight chains with BA fixed
+pp.count_chain(34)                             # 3
 ```
 
 Counts are exact closed forms (no enumeration), so they work for any n, for example about 69 million
@@ -179,15 +201,17 @@ labelled largest placements at n = 400; enumeration is lazy.
 ### Tests
 
 ```bash
-pytest -q                          # both test files, 73 tests
+pytest -q                          # both test files, 79 tests
 ```
 
 ## Open questions
 
 * Prove that the minimum non-overlapping spacing is `ceil(n/6)` for all n >= 7.
 * Assess tension states and multiple placements for n > 55.
-* Relate the placement counts to the "Multiple Placements (2)" labels in the data (n = 34 to 55): under the
-  no-overlap rule n = 34 has 10 distinct largest placements, so that label must mean something stricter.
+* Update the "Multiple Placements (2)" labels in the data. With BA fixed there are **3** tight-chain
+  placements at every labelled n (34 to 55, all with five neighbours), not 2. Eighteen other assessed rows
+  that also have 2 or 3 placements (n = 7, 9, 11, 13, 14, 16, 17, 19, 21, 22, 23, 26 to 29, 31 to 33) carry
+  no such label, so decide where the labels should start.
 
 ## License
 

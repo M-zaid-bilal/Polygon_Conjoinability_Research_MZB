@@ -880,6 +880,13 @@ def placements_list(n: int, size: int, symmetry: str, limit: int, order: str) ->
             for p in found]
 
 @st.cache_data(show_spinner=False)
+def chain_list(n: int, size: int, mirror: bool) -> list:
+    return [dict(edges=c.placement.edges, gaps=c.placement.gaps, untouched=c.placement.untouched,
+                 kind=c.placement.kind, maximal=c.placement.maximal, label=c.label, anchor=True,
+                 pocket=c.pocket_untouched)
+            for c in pl.chain_placements(n, size, mirror)]
+
+@st.cache_data(show_spinner=False)
 def neighbour_xy(n: int, edge: int) -> list:
     xs, ys = ps.neighbour(n, edge).exterior.xy
     return list(zip(xs, ys))
@@ -891,10 +898,18 @@ def _draw_placement(ax, n: int, rec: dict, detail: bool = True):
                                   ec=C["k_line"], lw=1.4 if detail else 0.8, zorder=2))
     touched = set()
     for i, e in enumerate(edges):
-        ax.add_patch(mpatches.Polygon(neighbour_xy(n, e), closed=True,
-                                      fc="#C6F6D5" if i % 2 == 0 else "#FEEBC8",
-                                      ec=C["k6"] if i % 2 == 0 else C["mp"],
-                                      lw=1.1 if detail else 0.6, alpha=0.9, zorder=1))
+        is_ba = bool(rec.get("anchor")) and e == 0          # the fixed neighbour BA is drawn in red
+        xy = neighbour_xy(n, e)
+        ax.add_patch(mpatches.Polygon(xy, closed=True,
+                                      fc="#FED7D7" if is_ba else ("#C6F6D5" if i % 2 == 0 else "#FEEBC8"),
+                                      ec="#C53030" if is_ba else (C["k6"] if i % 2 == 0 else C["mp"]),
+                                      lw=(2.2 if detail else 1.4) if is_ba else (1.1 if detail else 0.6),
+                                      alpha=0.95, zorder=1))
+        if is_ba:
+            cx = sum(p[0] for p in xy[:-1]) / (len(xy) - 1)
+            cy = sum(p[1] for p in xy[:-1]) / (len(xy) - 1)
+            ax.text(cx, cy, "BA", ha="center", va="center", color="#C53030", zorder=7,
+                    fontsize=13 if detail else 8, fontweight="bold")
         touched.update({e % n, (e + 1) % n})
     if detail:
         if n <= 150:
@@ -913,8 +928,9 @@ def _draw_placement(ax, n: int, rec: dict, detail: bool = True):
 def fig_placement(n: int, rec: dict) -> plt.Figure:
     fig, ax = plt.subplots(figsize=(8, 8))
     _draw_placement(ax, n, rec, detail=True)
+    extra = f", BA fixed, {rec['label']}" if rec.get("label") else ""
     ax.set_title(f"n = {n}: {len(rec['edges'])} neighbours, gaps {'-'.join(map(str, rec['gaps']))}  "
-                 f"({rec['kind']})", fontsize=11, fontweight="bold")
+                 f"({rec['kind']}{extra})", fontsize=11, fontweight="bold")
     fig.tight_layout()
     return fig
 
@@ -925,11 +941,84 @@ def fig_placement_grid(n: int, recs: list, cols: int = 4) -> plt.Figure:
         ax.axis("off")
     for ax, (i, rec) in zip(axes.ravel(), enumerate(recs, start=1)):
         _draw_placement(ax, n, rec, detail=False)
-        ax.set_title(f"#{i}  {'-'.join(map(str, rec['gaps']))}", fontsize=9)
+        ax.set_title(f"#{i}  {rec['label'] + '  ' if rec.get('label') else ''}{'-'.join(map(str, rec['gaps']))}", fontsize=9)
     fig.tight_layout()
     return fig
 
-def render_placements_tab():
+def _render_chain_mode(df: pd.DataFrame):
+    st.markdown(
+        "Fix one neighbour on edge 0 (**BA**, red). A **tight chain** has every gap equal to the minimum *m* "
+        "except one gap, the **pocket**, which takes all the slack. Walking from BA you meet `ahead` tight "
+        "neighbours before the pocket and `behind` the other way round (ahead + behind = neighbours - 1). "
+        "Mirror images are one placement, so for n = 34 the placements are 4+0, 3+1 and 2+2. "
+        "When 6 divides n there is no slack: the single perfect ring.")
+    c1, c2 = st.columns(2)
+    with c1:
+        n = int(st.number_input("n - vertices of the central polygon", min_value=3, max_value=400,
+                                value=34, step=1, key="ch_n"))
+        info = placements_summary(n)
+        k = info["k"]
+        sizes = list(range(1, k + 1))
+        size = st.selectbox("Number of neighbours", sizes, index=len(sizes) - 1, key=f"ch_size_{n}",
+                            format_func=lambda t: f"{t} (the maximum, k)" if t == k else str(t))
+    with c2:
+        mirror = st.checkbox("Treat mirror images (about BA's axis) as the same placement", value=True, key="ch_mirror")
+
+    recs = chain_list(n, size, mirror)
+    if not recs:
+        st.warning("No tight chain of that size.")
+        return
+    slack = n - size * info["m"]
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("min gap m", info["m"]); m2.metric("max neighbours k", k)
+    m3.metric("slack (n - size*m)", slack); m4.metric("pocket (untouched vertices)", recs[0]["pocket"])
+    m5.metric("placements with BA fixed", len(recs))
+    st.caption(f"{len(recs)} tight-chain placement(s), "
+               f"{'mirror images identified' if mirror else 'mirror images listed separately'}: "
+               + ", ".join(r["label"] for r in recs) + ".")
+
+    st.markdown("#### Overview")
+    mpl_to_st(fig_placement_grid(n, recs[:24]))
+    st.markdown("#### One placement in detail")
+    pick = 1 if len(recs) == 1 else int(st.slider("Placement #", 1, len(recs), 1, key=f"ch_pick_{n}_{size}_{mirror}"))
+    mpl_to_st(fig_placement(n, recs[pick - 1]))
+    st.caption("BA is red. Red dots / labels: central vertices touched by no neighbour; the pocket is the gap with the most.")
+
+    st.markdown("#### Table")
+    table = pd.DataFrame([{"#": i, "ahead+behind": r["label"], "kind": r["kind"],
+                           "gaps": "-".join(map(str, r["gaps"])),
+                           "untouched per gap": "-".join(map(str, r["untouched"])),
+                           "edges": " ".join(map(str, r["edges"]))} for i, r in enumerate(recs, start=1)])
+    st.dataframe(table, use_container_width=True, hide_index=True)
+    left, right = st.columns(2)
+    with left:
+        if st.button("Verify these placements by exact geometry", key="ch_verify"):
+            ok = [pl.verify_placement_geometry(n, r["edges"]) for r in recs]
+            (st.success if all(ok) else st.error)(
+                f"{sum(ok)} of {len(ok)} placements checked: no two neighbours overlap."
+                if all(ok) else f"{len(ok) - sum(ok)} placement(s) have overlapping neighbours.")
+    with right:
+        st.download_button("Download table as CSV", data=table.to_csv(index=False).encode("utf-8"),
+                           file_name=f"chain_placements_n{n}_size{size}.csv", mime="text/csv")
+
+    with st.expander("Compare with the 'Multiple Placements (N)' labels in the data"):
+        lab = df[df["tension_state"].str.lower().str.contains("multiple placement", na=False)].copy()
+        if lab.empty:
+            st.info("The loaded data has no 'Multiple Placements' labels.")
+        else:
+            lab["label_N"] = lab["tension_state"].str.extract(r"\((\d+)\)")[0].astype(float)
+            lab["computed"] = lab["n"].apply(lambda v: pl.count_chain(int(v)))
+            lab["match"] = lab["label_N"] == lab["computed"]
+            show_cols = lab[["n", "k_n", "tension_state", "label_N", "computed", "match"]]
+            bad = show_cols[~show_cols["match"]]
+            if bad.empty:
+                st.success(f"All {len(show_cols)} labelled rows agree with the computed number of placements.")
+            else:
+                st.warning(f"{len(bad)} of {len(show_cols)} labelled rows differ from the computed number of "
+                           "tight-chain placements (largest size, BA fixed, mirror images identified).")
+            st.dataframe(show_cols, use_container_width=True, hide_index=True)
+
+def render_placements_tab(df: pd.DataFrame):
     st.subheader("Placement Explorer")
     if not (SOLVER_OK and PLACEMENTS_OK):
         st.error(f"`Polygon_placements` could not be imported ({PLACEMENTS_ERR or SOLVER_ERR}). Keep "
@@ -942,6 +1031,12 @@ def render_placements_tab():
         "**perfect ring** (each neighbour shares an edge with the next, like the 36-gon; only when 6 divides n). "
         "Consecutive chosen edges must be at least *m* apart, where *m* is the minimum non-overlapping edge "
         "spacing, so a placement is described by its cyclic **gaps** (each >= m, summing to n).")
+
+    mode = st.radio("What to explore", ["Tight chains with BA fixed", "All valid placements"],
+                    horizontal=True, key="pl_mode")
+    if mode.startswith("Tight"):
+        _render_chain_mode(df)
+        return
 
     c1, c2 = st.columns(2)
     with c1:
@@ -1401,7 +1496,7 @@ At n >= 34, multiple placements create flexibility; HR collapses isomers to one 
 
     # -- TAB: PLACEMENTS ----------------------------------------------------
     with tab_place:
-        render_placements_tab()
+        render_placements_tab(df)
 
     # -- TAB: RAW DATA ------------------------------------------------------
     with tab_raw:

@@ -1,9 +1,9 @@
 # Polygon Conjoinability Research - Python dependencies
 #
-# Python 3.10+ (tested on 3.12).  The lower bounds below were tested together
-# (tests, solver CLI and dashboard all pass); the newest releases at the time of
-# writing (streamlit 1.67, pandas 3.0, numpy 2.5, matplotlib 3.11, plotly 7.1,
-# shapely 2.2) were tested too.
+# Python 3.10+ (tested on 3.12; the code itself needs 3.9+).  The lower bounds below were tested
+# together: all 79 tests, the solver and placements command lines and the dashboard pass on them.
+# The newest releases at the time of writing (streamlit 1.67, pandas 3.0, numpy 2.5, matplotlib 3.11,
+# plotly 7.1, shapely 2.2) were tested too.
 #
 # Install:   pip install -r requirements.txt
 
@@ -14,10 +14,10 @@ numpy>=2.0           # current pyarrow (installed by streamlit) requires NumPy 2
 matplotlib>=3.9
 seaborn>=0.13.2
 plotly>=5.18
-openpyxl>=3.1.2      # reads the .xlsx workbooks
+openpyxl>=3.1.2      # pandas uses it to read the .xlsx workbooks
 
-# --- exact geometric solver (Polygon_solver.py) -----------------------------
-shapely>=2.0.6       # exact polygon intersection
+# --- geometry: solver and placements (Polygon_solver.py, Polygon_placements.py) ---
+shapely>=2.0.6       # exact polygon intersection (Polygon_placements.py needs no other package)
 
-# --- tests only (test_polygon_solver.py) ------------------------------------
+# --- tests only (test_polygon_solver.py, test_polygon_placements.py) ------------
 pytest>=7.4

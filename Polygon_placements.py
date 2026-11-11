@@ -34,6 +34,15 @@ Writing the t cyclic gaps as g_1..g_t (each >= m, sum = n):
     * the placement is *maximal* (nothing more fits) iff every gap < 2m
     * the largest placement has t = k(n) neighbours; its slack is n - k*m
 
+Tight chains with BA fixed (the placements counted in the research)
+-------------------------------------------------------------------
+Fix one neighbour on edge 0 (called BA).  A *tight chain* has every gap equal to m (the "4 skipping"
+for n = 34) except one gap, the *pocket*, which takes all the slack (m + slack).  Walking from BA
+you meet `ahead` tight neighbours before the pocket and `behind` the other way round
+(ahead + behind = size - 1).  Mirror images (about BA's axis) are the same placement, so
+(ahead, behind) = (4, 0), (3, 1), (2, 2) for n = 34 are THREE placements.  In general a largest
+tight chain has ceil(k/2) placements when slack > 0, and exactly one (the perfect ring) when slack = 0.
+
 Counting (exact, closed form, no enumeration needed)
 ----------------------------------------------------
     labelled placements of size t       n/t * C(n - t(m-1) - 1, t - 1)
@@ -46,6 +55,7 @@ Command line
 ------------
     python Polygon_placements.py count 34                       # counts for every size
     python Polygon_placements.py list  34 --size 5 --symmetry dihedral --limit 20
+    python Polygon_placements.py chains 34                      # tight chains with BA fixed: 3 placements
     python Polygon_placements.py check --n-max 120              # re-verify the key fact geometrically
 
 Requires: pandas, shapely (via Polygon_solver)
@@ -69,6 +79,7 @@ except ModuleNotFoundError:
 __all__ = [
     "Placement", "contact_kind", "min_gap", "max_size", "is_valid", "verify_placement_geometry",
     "conflict_distances", "check_conflict_structure",
+    "ChainPlacement", "chain_placements", "count_chain",
     "count_labelled", "count_classes", "count_by_size",
     "iter_placements", "list_placements", "to_dataframe",
 ]
@@ -233,6 +244,64 @@ def count_by_size(n: int) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+# --------------------------------------------------------------------------- tight chains, BA fixed
+@dataclass(frozen=True)
+class ChainPlacement:
+    """A tight-chain placement with BA (edge 0) occupied."""
+    placement: Placement
+    ahead: int      # tight neighbours met going one way from BA before the pocket
+    behind: int     # tight neighbours going the other way
+
+    @property
+    def label(self) -> str:
+        return "ring" if self.placement.kind == "perfect ring" else f"{self.ahead}+{self.behind}"
+
+    @property
+    def pocket_untouched(self) -> int:
+        """Untouched central vertices in the pocket (the one gap larger than m; m-2 if there is none)."""
+        return max(self.placement.untouched)
+
+
+def chain_placements(n: int, size: int | None = None, mirror: bool = True) -> list[ChainPlacement]:
+    """All tight-chain placements of `size` neighbours (default: the maximum k) with BA fixed on edge 0.
+
+    mirror=True  : a placement and its mirror image about BA's axis are one placement (ahead >= behind)
+    mirror=False : both are listed
+    """
+    t = max_size(n) if size is None else size
+    m = min_gap(n)
+    if t < 1 or n < t * m:
+        return []
+    slack = n - t * m
+    if t == 1 or slack == 0:                       # a single neighbour, or the closed perfect ring
+        positions = [t - 1]
+    elif mirror:
+        positions = list(range(math.ceil((t - 1) / 2), t))
+    else:
+        positions = list(range(t))
+    out = []
+    for big in positions:                          # `big` = index of the pocket gap, counted from BA
+        gaps = [m] * t
+        gaps[big] = n - (t - 1) * m                # pocket takes all the slack (= n when t == 1)
+        edges = [0]
+        for g in gaps[:-1]:
+            edges.append(edges[-1] + g)
+        ahead, behind = (big, t - 1 - big) if t > 1 and slack > 0 else (t - 1, 0)
+        out.append(ChainPlacement(_make(n, edges), ahead, behind))
+    return out
+
+
+def count_chain(n: int, size: int | None = None, mirror: bool = True) -> int:
+    """Number of tight-chain placements with BA fixed (closed form)."""
+    t = max_size(n) if size is None else size
+    m = min_gap(n)
+    if t < 1 or n < t * m:
+        return 0
+    if t == 1 or n == t * m:
+        return 1
+    return (t + 1) // 2 if mirror else t
+
+
 # --------------------------------------------------------------------------- enumeration
 def _compositions(total: int, parts: int, minimum: int) -> Iterator[tuple[int, ...]]:
     """All tuples of `parts` integers >= minimum summing to total, in lexicographic order."""
@@ -341,6 +410,19 @@ def _cmd_list(a: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_chains(a: argparse.Namespace) -> int:
+    chains = chain_placements(a.n, a.size, mirror=not a.no_mirror)
+    if not chains:
+        print("no tight chain of that size")
+        return 1
+    print(f"n = {a.n}: minimum gap m = {min_gap(a.n)}, tight chains with BA fixed"
+          f" ({'mirror images identified' if not a.no_mirror else 'mirror images listed separately'}): {len(chains)}")
+    df = to_dataframe([c.placement for c in chains])
+    df.insert(2, "ahead+behind", [c.label for c in chains])
+    print(df.to_string(index=False))
+    return 0
+
+
 def _cmd_check(a: argparse.Namespace) -> int:
     bad = [n for n in range(a.n_min, a.n_max + 1) if not check_conflict_structure(n)]
     if bad:
@@ -364,6 +446,11 @@ def main(argv: list[str] | None = None) -> int:
     l.add_argument("--limit", type=int, default=30)
     l.add_argument("--order", choices=("lexicographic", "balanced"), default="balanced")
     l.set_defaults(func=_cmd_list)
+
+    h = sub.add_parser("chains", help="tight-chain placements with BA (edge 0) fixed")
+    h.add_argument("n", type=int); h.add_argument("--size", type=int, default=None)
+    h.add_argument("--no-mirror", action="store_true", help="list mirror images separately")
+    h.set_defaults(func=_cmd_chains)
 
     k = sub.add_parser("check", help="re-verify the overlap structure by exact geometry")
     k.add_argument("--n-min", type=int, default=3); k.add_argument("--n-max", type=int, default=120)
