@@ -170,8 +170,19 @@ def parse_main_sheet(raw: pd.DataFrame) -> pd.DataFrame:
     df = _norm_cols(raw.copy(), MAIN_COL_ALIASES)
     # Drop junk unnamed cols
     df = df[[c for c in df.columns if not str(c).startswith("Unnamed")]]
-    df["n"]   = pd.to_numeric(df.get("n",   pd.Series(dtype=float)), errors="coerce")
+    n_raw = pd.to_numeric(df.get("n", pd.Series(dtype=float)), errors="coerce")
     df["k_n"] = pd.to_numeric(df.get("k_n", pd.Series(dtype=float)), errors="coerce")
+    # Column A holds "=A57+1"-style formulas. If the workbook was re-saved by a tool that drops cached
+    # formula results, those cells read as NaN although k(n) is present: rebuild n by counting rows.
+    n_missing = n_raw.isna() & df["k_n"].notna()
+    n_rebuilt = 0
+    if n_missing.any() and n_raw.notna().any():
+        pos = pd.Series(np.arange(len(n_raw)), index=n_raw.index)
+        last_pos = pos.where(n_raw.notna()).ffill()
+        n_filled = n_raw.ffill() + (pos - last_pos)
+        n_raw = n_raw.where(~n_missing, n_filled)
+        n_rebuilt = int(n_missing.sum())
+    df["n"] = n_raw
     df["s_n"] = pd.to_numeric(df.get("s_n", pd.Series(dtype=float)), errors="coerce").fillna(0)
     df.dropna(subset=["n", "k_n"], inplace=True)
     df = df.drop_duplicates(subset=["n"], keep="first")
@@ -214,7 +225,9 @@ def parse_main_sheet(raw: pd.DataFrame) -> pd.DataFrame:
                    f"alpha = {r['angle_deg']:.2f} deg<br>Tension: {r['tension_state']}"),
         axis=1,
     )
-    return df.sort_values("n").reset_index(drop=True)
+    out = df.sort_values("n").reset_index(drop=True)
+    out.attrs["n_rebuilt"] = n_rebuilt
+    return out
 
 def parse_hr_sheet(raw: pd.DataFrame) -> pd.DataFrame:
     df = _norm_cols(raw.copy(), HR_SHEET_ALIASES)
@@ -633,6 +646,24 @@ def fig_formula_analysis(df: pd.DataFrame) -> plt.Figure:
     fig.tight_layout()
     return fig
 
+# -- Plot 9: internal angle vs s(n)  (was spreadsheet Chart3 + Chart4) -------
+def fig_angle_vs_s(df: pd.DataFrame) -> plt.Figure:
+    kcol = {3: "#68D391", 4: C["mp"], 5: C["k_line"], 6: C["k6"]}
+    fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+    for ax, ycol, ylab in ((axes[0], "angle_deg", "Internal angle (degrees)"),
+                           (axes[1], "angle_rad", "Internal angle (radians)")):
+        ax.plot(df["s_n"], df[ycol], color="#B8C3D6", lw=0.8, zorder=1)      # path in order of n
+        for k, sub in df.groupby("k_n"):
+            ax.scatter(sub["s_n"], sub[ycol], s=28, color=kcol.get(int(k), C["other"]),
+                       edgecolors="white", lw=0.3, label=f"k = {int(k)}", zorder=3)
+        ax.set_xlabel("s(n) - number of vertices skipped", fontweight="bold")
+        ax.set_ylabel(ylab, fontweight="bold")
+    axes[0].legend(title="Conjoinability", fontsize=8)
+    fig.suptitle("Internal angle of the regular n-gon vs. number of vertices skipped",
+                 fontweight="bold", fontsize=13)
+    fig.tight_layout()
+    return fig
+
 # -- Plot 8: Plotly interactive 3D -----------------------------------------
 def fig_plotly_3d(df: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
@@ -825,7 +856,7 @@ def main():
 
     uploaded = st.sidebar.file_uploader(
         "Upload Excel (.xlsx) or cleaned CSV", type=["xlsx", "csv"],
-        help="Upload the corrected spreadsheet / CSV, or the app will look for 'spreadsheet_kn_corrected.xlsx', then 'Copy of spreadsheet_kn.xlsx', in the same folder.",
+        help="Upload the corrected spreadsheet / CSV, or the app will look in the same folder for 'spreadsheet_kn_corrected.xlsx', 'Copy of spreadsheet_kn.xlsx', then 'polygon_conjoinability_Sheet1.csv'.",
     )
 
     # Resolve file source
@@ -834,7 +865,7 @@ def main():
         file_label = uploaded.name
     else:
         default = next((p for p in ("spreadsheet_kn_corrected.xlsx", "Copy of spreadsheet_kn.xlsx",
-                                    "polygon_conjoinability_Sheet1_corrected.csv") if os.path.exists(p)), None)
+                                    "polygon_conjoinability_Sheet1.csv", "polygon_conjoinability_Sheet1_corrected.csv") if os.path.exists(p)), None)
         if default:
             file_src = default
             file_label = default
@@ -903,6 +934,9 @@ def main():
     st.sidebar.metric("HR points",  len(eda["hr_ns"]))
     st.sidebar.metric("k=6 share",  f"{eda['pct_k6']}%")
     st.sidebar.metric("Max s(n)",   eda["s_max"])
+    if df.attrs.get("n_rebuilt"):
+        st.sidebar.info(f"The workbook has no cached values in the Vertices column; n was rebuilt for "
+                        f"{df.attrs['n_rebuilt']} rows. Re-save the file in Excel / Sheets, or use the CSV.")
     _bad = sorted(set(eda["bad_s_ns"]) | set(eda["bad_k_ns"]))
     if _bad:
         st.sidebar.warning(f"{len(_bad)} row(s) disagree with k(n)=floor(n/ceil(n/6)) / s(n)=max(0,ceil(n/6)-2): n = {_bad[:12]}{' ...' if len(_bad) > 12 else ''}")
@@ -921,6 +955,7 @@ def main():
         "isomer"   : st.sidebar.checkbox("6 - Isomer Emergence",          True),
         "formula"  : st.sidebar.checkbox("7 - s(n) Formula Analysis",     True),
         "3d"       : st.sidebar.checkbox("8 - Interactive 3D (Plotly)",   True),
+        "angle"    : st.sidebar.checkbox("9 - Internal angle vs s(n)",    True),
     }
 
     # -----------------------------------------------------------------------
@@ -1162,6 +1197,10 @@ At n >= 34, multiple placements create flexibility; HR collapses isomers to one 
         if show["3d"]:
             st.markdown("#### Plot 8 - Interactive 3D: n x alpha -> k(n)")
             st.plotly_chart(fig_plotly_3d(df), use_container_width=True)
+
+        if show["angle"]:
+            st.markdown("#### Plot 9 - Internal angle vs. vertices skipped (degrees and radians)")
+            mpl_to_st(fig_angle_vs_s(df))
 
     # -- TAB: SUPPLEMENTARY SHEETS ------------------------------------------
     with tab_supp:
