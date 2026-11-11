@@ -5,12 +5,13 @@ Muhammad Zaid Bilal | May 2026
 Requirements (Python 3.10+):
   pip install streamlit pandas numpy matplotlib seaborn plotly openpyxl shapely
 
-Keep Polygon_solver.py in the same folder (it powers the "Geometric Solver" tab).
+Keep Polygon_solver.py and Polygon_placements.py in the same folder (they power the "Geometric Solver"
+and "Placements" tabs).
 
 Run:
   streamlit run Poly_Research.py
 
-Place spreadsheet_kn_corrected.xlsx (or the corrected CSV) in the same folder, or upload it via the sidebar.
+Place spreadsheet_kn_corrected_final.xlsx (or the corrected CSV) in the same folder, or upload it via the sidebar.
 """
 
 # ---------------------------------------------------------------------------
@@ -50,6 +51,18 @@ for _mod in ("Polygon_solver", "polygon_solver"):      # exact geometric solver 
     except Exception as _exc:
         _solver_errs.insert(0, str(_exc))
 SOLVER_ERR = "" if SOLVER_OK else (_solver_errs[0] if _solver_errs else "unknown error")
+
+pl, PLACEMENTS_OK, _pl_errs = None, False, []
+for _mod in ("Polygon_placements", "polygon_placements"):   # all valid placements (needs Polygon_solver)
+    try:
+        pl = importlib.import_module(_mod)
+        PLACEMENTS_OK = True
+        break
+    except ModuleNotFoundError as _exc:
+        (_pl_errs.append if _exc.name == _mod else lambda m: _pl_errs.insert(0, m))(str(_exc))
+    except Exception as _exc:
+        _pl_errs.insert(0, str(_exc))
+PLACEMENTS_ERR = "" if PLACEMENTS_OK else (_pl_errs[0] if _pl_errs else "unknown error")
 
 # ---------------------------------------------------------------------------
 # PAGE CONFIG
@@ -848,6 +861,155 @@ def render_solver_tab(df: pd.DataFrame):
         st.download_button("Download table CSV", data=table.to_csv(index=False).encode("utf-8"),
                            file_name="polygon_conjoinability_generated.csv", mime="text/csv")
 
+# ---------------------------------------------------------------------------
+# PLACEMENT EXPLORER TAB (uses Polygon_placements.py)
+# ---------------------------------------------------------------------------
+PLACEMENT_SYMMETRY = {"Up to rotation": "rotation",
+                      "Up to rotation and reflection": "dihedral",
+                      "All labelled placements": "none"}
+
+@st.cache_data(show_spinner=False)
+def placements_summary(n: int) -> dict:
+    m, k = pl.min_gap(n), pl.max_size(n)
+    return dict(m=m, k=k, slack=n - k * m, counts=pl.count_by_size(n))
+
+@st.cache_data(show_spinner="Enumerating placements ...")
+def placements_list(n: int, size: int, symmetry: str, limit: int, order: str) -> list:
+    found = pl.list_placements(n, size, symmetry, limit, order)
+    return [dict(edges=p.edges, gaps=p.gaps, untouched=p.untouched, kind=p.kind, maximal=p.maximal)
+            for p in found]
+
+@st.cache_data(show_spinner=False)
+def neighbour_xy(n: int, edge: int) -> list:
+    xs, ys = ps.neighbour(n, edge).exterior.xy
+    return list(zip(xs, ys))
+
+def _draw_placement(ax, n: int, rec: dict, detail: bool = True):
+    """Central n-gon (blue), neighbours (green / orange), untouched central vertices (red)."""
+    edges, t = rec["edges"], len(rec["edges"])
+    ax.add_patch(mpatches.Polygon(ps.regular_polygon(n), closed=True, fc="#BEE3F8",
+                                  ec=C["k_line"], lw=1.4 if detail else 0.8, zorder=2))
+    touched = set()
+    for i, e in enumerate(edges):
+        ax.add_patch(mpatches.Polygon(neighbour_xy(n, e), closed=True,
+                                      fc="#C6F6D5" if i % 2 == 0 else "#FEEBC8",
+                                      ec=C["k6"] if i % 2 == 0 else C["mp"],
+                                      lw=1.1 if detail else 0.6, alpha=0.9, zorder=1))
+        touched.update({e % n, (e + 1) % n})
+    if detail:
+        if n <= 150:
+            for i, (x, y) in enumerate(ps.regular_polygon(n)):
+                ax.scatter(x, y, s=24 if n <= 60 else 9, zorder=5,
+                           color=C["k_line"] if i in touched else C["mt"])
+        for i, e in enumerate(edges):                   # label each gap with its untouched vertices
+            nxt = edges[(i + 1) % t] + (n if i == t - 1 else 0)
+            gap = nxt - e if t > 1 else n
+            ang = 2 * math.pi * ((e + 1 + nxt) / 2) / n
+            ax.text(1.16 * math.cos(ang), 1.16 * math.sin(ang), f"s={max(0, gap - 2)}",
+                    ha="center", va="center", fontsize=8, color=C["mt"], zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.85))
+    ax.set_xlim(-3.2, 3.2); ax.set_ylim(-3.2, 3.2); ax.set_aspect("equal"); ax.axis("off")
+
+def fig_placement(n: int, rec: dict) -> plt.Figure:
+    fig, ax = plt.subplots(figsize=(8, 8))
+    _draw_placement(ax, n, rec, detail=True)
+    ax.set_title(f"n = {n}: {len(rec['edges'])} neighbours, gaps {'-'.join(map(str, rec['gaps']))}  "
+                 f"({rec['kind']})", fontsize=11, fontweight="bold")
+    fig.tight_layout()
+    return fig
+
+def fig_placement_grid(n: int, recs: list, cols: int = 4) -> plt.Figure:
+    rows = math.ceil(len(recs) / cols)
+    fig, axes = plt.subplots(rows, cols, figsize=(3.1 * cols, 3.3 * rows), squeeze=False)
+    for ax in axes.ravel():
+        ax.axis("off")
+    for ax, (i, rec) in zip(axes.ravel(), enumerate(recs, start=1)):
+        _draw_placement(ax, n, rec, detail=False)
+        ax.set_title(f"#{i}  {'-'.join(map(str, rec['gaps']))}", fontsize=9)
+    fig.tight_layout()
+    return fig
+
+def render_placements_tab():
+    st.subheader("Placement Explorer")
+    if not (SOLVER_OK and PLACEMENTS_OK):
+        st.error(f"`Polygon_placements` could not be imported ({PLACEMENTS_ERR or SOLVER_ERR}). Keep "
+                 "`Polygon_solver.py` and `Polygon_placements.py` next to this script and run `pip install shapely`.")
+        return
+    st.markdown(
+        "A **placement** is a set of edges of the central n-gon that each carry a neighbour (a reflected copy "
+        "of the central polygon). **Overlap on top of another polygon is invalid; touching is allowed.** "
+        "Two kinds of valid placement occur: **open** (neighbours stay apart, like the 25-gon) and "
+        "**perfect ring** (each neighbour shares an edge with the next, like the 36-gon; only when 6 divides n). "
+        "Consecutive chosen edges must be at least *m* apart, where *m* is the minimum non-overlapping edge "
+        "spacing, so a placement is described by its cyclic **gaps** (each >= m, summing to n).")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        n = int(st.number_input("n - vertices of the central polygon", min_value=3, max_value=400,
+                                value=34, step=1, key="pl_n"))
+        info = placements_summary(n)
+        k = info["k"]
+        sizes = list(range(1, k + 1))
+        size = st.selectbox("Number of neighbours", sizes, index=len(sizes) - 1, key=f"pl_size_{n}",
+                            format_func=lambda t: f"{t} (the maximum, k)" if t == k else str(t))
+    with c2:
+        sym_label = st.radio("Count placements", list(PLACEMENT_SYMMETRY), key="pl_sym",
+                             help="Rotations (and reflections) of the same arrangement are the same pattern.")
+        symmetry = PLACEMENT_SYMMETRY[sym_label]
+        order = st.selectbox("Order", ["Most balanced first", "Lexicographic"], key="pl_order")
+        limit = int(st.number_input("Show at most", min_value=1, max_value=200, value=12, step=1, key="pl_limit"))
+
+    labelled = pl.count_labelled(n, size)
+    rot, dih = pl.count_classes(n, size)
+    m1, m2, m3, m4, m5, m6 = st.columns(6)
+    m1.metric("min gap m", info["m"]); m2.metric("max neighbours k", k); m3.metric("slack (n - k*m)", info["slack"])
+    m4.metric("labelled", f"{labelled:,}"); m5.metric("up to rotation", f"{rot:,}"); m6.metric("up to rot. + refl.", f"{dih:,}")
+
+    total = {"rotation": rot, "dihedral": dih, "none": labelled}[symmetry]
+    order_key = "balanced" if order.startswith("Most") else "lexicographic"
+    recs = placements_list(n, size, symmetry, limit, order_key)
+    if not recs:
+        st.warning("No valid placement of that size.")
+        return
+    note = f"Showing {len(recs)} of {total:,} placements ({sym_label.lower()}), "
+    if order_key == "balanced" and total > 20000:
+        note += "in lexicographic order (too many to sort by balance)."
+    else:
+        note += "most balanced gap pattern first." if order_key == "balanced" else "in lexicographic order of the gaps."
+    st.caption(note)
+
+    table = pd.DataFrame([{"#": i, "kind": r["kind"], "gaps": "-".join(map(str, r["gaps"])),
+                           "untouched per gap": "-".join(map(str, r["untouched"])),
+                           "edges": " ".join(map(str, r["edges"])), "maximal": r["maximal"]}
+                          for i, r in enumerate(recs, start=1)])
+
+    st.markdown("#### Overview")
+    mpl_to_st(fig_placement_grid(n, recs[:24]))
+    if len(recs) > 24:
+        st.caption("The thumbnail grid shows the first 24; the table below lists all of them.")
+
+    st.markdown("#### One placement in detail")
+    pick = 1 if len(recs) == 1 else int(st.slider("Placement #", 1, len(recs), 1,
+                                                  key=f"pl_pick_{n}_{size}_{symmetry}_{order_key}_{limit}"))
+    mpl_to_st(fig_placement(n, recs[pick - 1]))
+    st.caption("Red dots / labels: central vertices touched by no neighbour (s = untouched vertices in that gap).")
+
+    st.markdown("#### Table")
+    st.dataframe(table, use_container_width=True, hide_index=True)
+    left, right = st.columns(2)
+    with left:
+        if st.button("Verify these placements by exact geometry", key="pl_verify"):
+            ok = [pl.verify_placement_geometry(n, r["edges"]) for r in recs]
+            (st.success if all(ok) else st.error)(
+                f"{sum(ok)} of {len(ok)} placements checked: no two neighbours overlap."
+                if all(ok) else f"{len(ok) - sum(ok)} placement(s) have overlapping neighbours.")
+    with right:
+        st.download_button("Download table as CSV", data=table.to_csv(index=False).encode("utf-8"),
+                           file_name=f"placements_n{n}_size{size}.csv", mime="text/csv")
+
+    st.markdown("#### How many placements of each size")
+    st.dataframe(info["counts"], use_container_width=True, hide_index=True)
+
 def main():
     # -- Sidebar: file upload ------------------------------------------------
     st.sidebar.title("Polygon Conjoinability")
@@ -856,7 +1018,7 @@ def main():
 
     uploaded = st.sidebar.file_uploader(
         "Upload Excel (.xlsx) or cleaned CSV", type=["xlsx", "csv"],
-        help="Upload the corrected spreadsheet / CSV, or the app will look in the same folder for 'spreadsheet_kn_corrected.xlsx', 'Copy of spreadsheet_kn.xlsx', then 'polygon_conjoinability_Sheet1.csv'.",
+        help="Upload the corrected spreadsheet / CSV, or the app will look in the same folder for 'spreadsheet_kn_corrected_final.xlsx', 'Copy of spreadsheet_kn.xlsx', then 'polygon_conjoinability_Sheet1.csv'.",
     )
 
     # Resolve file source
@@ -864,7 +1026,8 @@ def main():
         file_src = uploaded
         file_label = uploaded.name
     else:
-        default = next((p for p in ("spreadsheet_kn_corrected.xlsx", "Copy of spreadsheet_kn.xlsx",
+        default = next((p for p in ("spreadsheet_kn_corrected_final.xlsx",
+                                    "spreadsheet_kn_corrected.xlsx", "Copy of spreadsheet_kn.xlsx",
                                     "polygon_conjoinability_Sheet1.csv", "polygon_conjoinability_Sheet1_corrected.csv") if os.path.exists(p)), None)
         if default:
             file_src = default
@@ -879,7 +1042,7 @@ def main():
         src_name = getattr(src, "name", src if isinstance(src, str) else "")
         if str(src_name).lower().endswith(".csv"):
             return {"CSV": pd.read_csv(src)}
-        xf = pd.ExcelFile(src)
+        xf = pd.ExcelFile(src, engine="openpyxl")      # explicit engine: works whatever the extension
         sheets = {}
         for name in xf.sheet_names:
             raw = xf.parse(name, header=0)
@@ -968,12 +1131,13 @@ def main():
     st.divider()
 
     # -- Tabs ---------------------------------------------------------------
-    tab_eda, tab_clean, tab_insights, tab_plots, tab_solver, tab_supp, tab_raw = st.tabs([
+    tab_eda, tab_clean, tab_insights, tab_plots, tab_solver, tab_place, tab_supp, tab_raw = st.tabs([
         "EDA",
         "Data Cleaning",
         "Insights",
         "Visualisations",
         "Geometric Solver",
+        "Placements",
         "Supplementary Sheets",
         "Raw Data",
     ])
@@ -1234,6 +1398,10 @@ At n >= 34, multiple placements create flexibility; HR collapses isomers to one 
     # -- TAB: GEOMETRIC SOLVER ---------------------------------------------
     with tab_solver:
         render_solver_tab(df)
+
+    # -- TAB: PLACEMENTS ----------------------------------------------------
+    with tab_place:
+        render_placements_tab()
 
     # -- TAB: RAW DATA ------------------------------------------------------
     with tab_raw:

@@ -45,6 +45,24 @@ overlap is `ceil(n/6)` edges (checked by exact polygon intersection for every n 
 > The model tests pairwise overlap of neighbours only and does not model tension states,
 > phase shifts or multiple placements.
 
+### Valid placements
+
+A **placement** is a set of edges of the central n-gon that each carry a neighbour. **Overlap on
+top of another polygon is invalid; touching is allowed.** Two kinds of valid placement occur, both
+seen in the GeoGebra drawings:
+
+* **open**: neighbours stay apart from each other (the 25-gon: 5 neighbours, 3 untouched vertices
+  between each pair);
+* **perfect ring**: every neighbour shares an edge with the next, so the ring closes exactly (the
+  36-gon: 6 neighbours on edges 0, 6, 12, 18, 24, 30). This occurs exactly when 6 divides n, and
+  it is then the only largest placement up to rotation.
+
+Two neighbours overlap exactly when their edges are fewer than `m = ceil(n/6)` apart (verified by
+exact polygon intersection for every n up to 400), so a placement is any set of edges whose cyclic
+gaps are all at least `m`. `Polygon_placements.py` counts and lists them: for n = 34 there are
+476 largest placements (5 neighbours) with every edge labelled, 14 up to rotation, and 10 up to
+rotation and reflection. More than one distinct largest placement first appears at n = 14.
+
 ## Data corrections
 
 An earlier version of the data contained entries that disagreed with the geometry
@@ -72,11 +90,13 @@ n = 174, and are left out of the dashboard's tension and isomer statistics.
 | File                                                                                  | What it is                                                                                                                                                                                                                                                |
 | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Polygon_solver.py`                                                                 | exact geometric solver for k(n) and s(n); also a command-line tool                                                                                                                                                                                        |
+| `Polygon_placements.py`                                                             | counts, lists and classifies **all valid placements** around a central n-gon (open or perfect ring); also a command-line tool                                                                                                                       |
 | `test_polygon_solver.py`                                                            | pytest suite for the solver (23 tests)                                                                                                                                                                                                                    |
-| `Poly_Research.py`                                                                  | Streamlit dashboard: EDA, data cleaning, insights, nine plots (every chart lives here), **Geometric Solver** tab                                                                                                                                    |
+| `test_polygon_placements.py`                                                        | pytest suite for the placements module (50 tests, including brute-force geometric cross-checks)                                                                                                                                                           |
+| `Poly_Research.py`                                                                  | Streamlit dashboard: EDA, data cleaning, insights, nine plots (every chart lives here), **Geometric Solver** and **Placements** tabs                                                                                                          |
 | `requirements.txt`                                                                  | Python dependencies                                                                                                                                                                                                                                       |
 | `polygon_conjoinability_Sheet1.csv`                                                 | corrected table, n = 3 to 400, 14 columns                                                                                                                                                                                                                 |
-| `spreadsheet_kn_corrected.xlsx`                                                     | corrected workbook, data only, three sheets: `Sheet1` (main table), `Sheet5` (interior and exterior angles at multiples of 6), `Sheet7` (check of s(n) against the formula). It contains **no charts**: all charts are drawn by the dashboard |
+| `spreadsheet_kn_corrected_final.xlsx`                                               | corrected workbook, data only, three sheets: `Sheet1` (main table), `Sheet5` (interior and exterior angles at multiples of 6), `Sheet7` (check of s(n) against the formula). It contains **no charts**: all charts are drawn by the dashboard |
 | `Copy of spreadsheet_kn.xlsx`                                                       | the **original, uncorrected** workbook, kept for provenance (the dashboard flags its 12 bad rows)                                                                                                                                                   |
 | `polygon_conjoinability_report.pdf`, `Copy of Conjoinability_Presentation-2.pptx` | report and slides                                                                                                                                                                                                                                         |
 | `Links.docx`                                                                        | list of links                                                                                                                                                                                                                                             |
@@ -103,15 +123,20 @@ pip install -r requirements.txt
 streamlit run Poly_Research.py
 ```
 
-The app loads `spreadsheet_kn_corrected.xlsx` from the same folder (then
+The app loads `spreadsheet_kn_corrected_final.xlsx` from the same folder (then
 `Copy of spreadsheet_kn.xlsx`, then `polygon_conjoinability_Sheet1.csv`), or any `.xlsx`
-or CSV you upload in the sidebar. Keep `Polygon_solver.py` in the same folder. The
-sidebar warns if any row disagrees with the exact formulas.
+or CSV you upload in the sidebar. Keep `Polygon_solver.py` and `Polygon_placements.py` in the same
+folder. The sidebar warns if any row disagrees with the exact formulas.
 
 The **Visualisations** tab draws nine plots (k(n) and s(n) against n, dual-axis, heatmap,
 s(n) against k(n), isomer emergence, formula analysis, an interactive 3D view, and internal angle
 against s(n) in degrees and radians). The **Geometric Solver** tab solves and draws any single n, checks the loaded dataset
 against the exact solver, and builds or extends the table (keeping existing tension labels).
+
+The **Placements** tab is interactive: enter n and the number of neighbours, choose whether rotations
+and reflections count as the same pattern, and browse every valid arrangement as a thumbnail grid,
+one large drawing (untouched vertices in red), and a table you can download. Each placement is
+labelled open or perfect ring, and a button re-checks the shown placements by exact geometry.
 
 ### Solver
 
@@ -131,17 +156,38 @@ ps.build_table(3, 400)       # pandas DataFrame in the CSV schema
 
 Solving every n from 3 to 400 takes about 3 seconds on one core.
 
+### Placements
+
+```bash
+python Polygon_placements.py count 34                       # how many placements of each size
+python Polygon_placements.py list 34 --size 5 --symmetry dihedral --limit 10
+python Polygon_placements.py check --n-max 400              # re-verify the overlap rule by exact geometry
+```
+
+```python
+import Polygon_placements as pp
+pp.count_labelled(34, 5)                       # 476 placements of 5 neighbours (edges labelled)
+pp.count_classes(34, 5)                        # (14, 10): up to rotation, up to rotation + reflection
+for p in pp.iter_placements(36, 6):            # lazy; use limit=... for huge spaces
+    print(p.edges, p.gaps, p.kind)             # (0, 6, 12, 18, 24, 30) (6, 6, 6, 6, 6, 6) perfect ring
+pp.list_placements(34, 5, "dihedral", limit=10, order="balanced")
+```
+
+Counts are exact closed forms (no enumeration), so they work for any n, for example about 69 million
+labelled largest placements at n = 400; enumeration is lazy.
+
 ### Tests
 
 ```bash
-pytest test_polygon_solver.py -q
+pytest -q                          # both test files, 73 tests
 ```
 
 ## Open questions
 
 * Prove that the minimum non-overlapping spacing is `ceil(n/6)` for all n >= 7.
 * Assess tension states and multiple placements for n > 55.
-* Count all valid placements (the solver returns one arrangement, not the number of them).
+* Relate the placement counts to the "Multiple Placements (2)" labels in the data (n = 34 to 55): under the
+  no-overlap rule n = 34 has 10 distinct largest placements, so that label must mean something stricter.
 
 ## License
 
