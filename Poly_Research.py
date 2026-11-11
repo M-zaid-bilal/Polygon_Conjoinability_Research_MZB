@@ -3,12 +3,14 @@ Polygon Conjoinability Research - Streamlit Dashboard
 Muhammad Zaid Bilal | May 2026
 
 Requirements (Python 3.10+):
-  pip install streamlit pandas numpy matplotlib seaborn plotly openpyxl
+  pip install streamlit pandas numpy matplotlib seaborn plotly openpyxl shapely
+
+Keep Polygon_solver.py in the same folder (it powers the "Geometric Solver" tab).
 
 Run:
-  streamlit run polygon_dashboard.py
+  streamlit run Poly_Research.py
 
-Place your Excel file in the same folder, or upload it via the sidebar.
+Place spreadsheet_kn_corrected.xlsx (or the corrected CSV) in the same folder, or upload it via the sidebar.
 """
 
 # ---------------------------------------------------------------------------
@@ -33,6 +35,21 @@ import plotly.express as px
 import streamlit as st
 
 warnings.filterwarnings("ignore")
+
+import importlib
+
+ps, SOLVER_OK, _solver_errs = None, False, []
+for _mod in ("Polygon_solver", "polygon_solver"):      # exact geometric solver (needs shapely)
+    try:
+        ps = importlib.import_module(_mod)
+        SOLVER_OK = True
+        break
+    except ModuleNotFoundError as _exc:
+        # a missing dependency (e.g. shapely) is more informative than a missing module file
+        (_solver_errs.append if _exc.name == _mod else lambda m: _solver_errs.insert(0, m))(str(_exc))
+    except Exception as _exc:
+        _solver_errs.insert(0, str(_exc))
+SOLVER_ERR = "" if SOLVER_OK else (_solver_errs[0] if _solver_errs else "unknown error")
 
 # ---------------------------------------------------------------------------
 # PAGE CONFIG
@@ -85,20 +102,18 @@ def tension_color(state: str) -> str:
 # ---------------------------------------------------------------------------
 # FORMULA HELPERS
 # ---------------------------------------------------------------------------
-def s_simple(n: int) -> int:
-    """Approx: max(0, floor((n-6)/6))"""
-    return max(0, int((n - 6) // 6))
+def s_exact(n: int) -> int:
+    """Exact: s(n) = max(0, ceil(n/6) - 2) -- untouched vertices of the central polygon
+    between two adjacent neighbours at the smallest non-overlapping edge spacing ceil(n/6)."""
+    return max(0, math.ceil(n / 6) - 2)
 
-def s_refined(n: int) -> int:
-    """Piecewise refined with step-back at HR and regime interpolation."""
-    if n <= 6:
-        return 0
-    if n % 6 == 0:
-        m = n // 6
-        if m <= 2:   return 0
-        elif m <= 9: return m - 2
-        elif m < 29: return int(round((m - 2) + (m - 9) * 2 / 20))
-        else:        return m
+def k_exact(n: int) -> int:
+    """Exact: k(n) = n for n <= 6, otherwise floor(n / ceil(n/6))."""
+    return n if n <= 6 else n // math.ceil(n / 6)
+
+def s_simple(n: int) -> int:
+    """Superseded approximation max(0, floor((n-6)/6)). Right at non-multiples of 6,
+    one too high at multiples of 6. Kept only for comparison."""
     return max(0, int((n - 6) // 6))
 
 # ---------------------------------------------------------------------------
@@ -133,6 +148,8 @@ def classify_sheet(raw: pd.DataFrame) -> str:
     """Return one of: 'main', 'hr_angles', 'chart_deg', 'chart_rad', 'empty', 'unknown'"""
     cols_lower = [str(c).strip().lower() for c in raw.columns]
     joined = " | ".join(cols_lower)
+    if "n" in cols_lower and "k_n" in cols_lower:      # cleaned CSV schema
+        return "main"
     if "vertices" in joined and "k(n)" in joined:
         return "main"
     if "side" in joined and "exterior angle" in joined:
@@ -153,33 +170,30 @@ def parse_main_sheet(raw: pd.DataFrame) -> pd.DataFrame:
     df = _norm_cols(raw.copy(), MAIN_COL_ALIASES)
     # Drop junk unnamed cols
     df = df[[c for c in df.columns if not str(c).startswith("Unnamed")]]
-
     df["n"]   = pd.to_numeric(df.get("n",   pd.Series(dtype=float)), errors="coerce")
     df["k_n"] = pd.to_numeric(df.get("k_n", pd.Series(dtype=float)), errors="coerce")
     df["s_n"] = pd.to_numeric(df.get("s_n", pd.Series(dtype=float)), errors="coerce").fillna(0)
-
     df.dropna(subset=["n", "k_n"], inplace=True)
-    df = df[df["n"].notna() & df["k_n"].notna()]
+    df = df.drop_duplicates(subset=["n"], keep="first")
     df["n"]   = df["n"].astype(int)
     df["k_n"] = df["k_n"].astype(int)
     df["s_n"] = df["s_n"].astype(int)
 
     # Derived numeric columns
     df["angle_rad"] = (df["n"] - 2) * math.pi / df["n"]
-    df["angle_deg"] = (df["n"] - 2) * 180.0  / df["n"]
+    df["angle_deg"] = (df["n"] - 2) * 180.0 / df["n"]
 
-    # Normalise tension_state strings
+    # Normalise tension_state strings ("Not assessed" marks rows with no tension analysis yet)
     if "tension_state" not in df.columns:
         df["tension_state"] = "Normal"
     df["tension_state"] = (
-        df["tension_state"]
-        .fillna("Normal")
-        .replace("0", "Normal")
+        df["tension_state"].fillna("Normal").astype(str)
+        .replace({"0": "Normal", "0.0": "Normal", "nan": "Normal"})
         .str.strip()
     )
 
-    # Canonical boolean flags
     ts = df["tension_state"].str.lower()
+    df["assessed"]               = ts != "not assessed"
     df["is_hex_resonance"]       = (df["n"] % 6 == 0) & (df["k_n"] == 6)
     df["is_max_tense"]           = ts.str.contains("maximally tense", na=False)
     df["is_phase_shift"]         = ts.str.contains("phase shift", na=False)
@@ -190,11 +204,11 @@ def parse_main_sheet(raw: pd.DataFrame) -> pd.DataFrame:
     # Plot colour per row
     df["plot_color"] = df["tension_state"].apply(tension_color)
 
-    # Approximate formula columns
-    df["s_simple"]  = df["n"].apply(s_simple)
-    df["s_refined"] = df["n"].apply(s_refined)
+    # Closed-form model columns (used to validate the data)
+    df["s_exact"]  = df["n"].apply(s_exact)
+    df["k_exact"]  = df["n"].apply(k_exact)
+    df["s_simple"] = df["n"].apply(s_simple)
 
-    # Hover text for Plotly
     df["hover"] = df.apply(
         lambda r: (f"n = {r['n']}<br>k(n) = {r['k_n']}<br>s(n) = {r['s_n']}<br>"
                    f"alpha = {r['angle_deg']:.2f} deg<br>Tension: {r['tension_state']}"),
@@ -228,45 +242,81 @@ def parse_chart_sheet(raw: pd.DataFrame, kind: str) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 def compute_eda(df: pd.DataFrame) -> dict:
     out = {}
-    out["n_rows"]      = len(df)
-    out["n_range"]     = (int(df["n"].min()), int(df["n"].max()))
-    out["k_dist"]      = df["k_n"].value_counts().sort_index().to_dict()
-    out["hr_ns"]       = sorted(df[df["is_hex_resonance"]]["n"].tolist())
-    out["mt_ns"]       = sorted(df[df["is_max_tense"] & ~df["is_hex_resonance"]]["n"].tolist())
-    out["mp_ns"]       = sorted(df[df["is_multiple_placements"]]["n"].tolist())
-    out["first_mp"]    = int(df[df["is_multiple_placements"]]["n"].min()) if out["mp_ns"] else None
-    out["first_skip"]  = int(df[df["uses_skipping"]]["n"].min()) if df["uses_skipping"].any() else None
-    out["s_max"]       = int(df["s_n"].max())
-    out["tension_dist"]= df["tension_state"].value_counts().to_dict()
-    out["pct_k6"]      = round(100 * df["is_hex_resonance"].mean(), 1)
-    out["pct_k5"]      = round(100 * (df["k_n"] == 5).mean(), 1)
-    out["pct_k4"]      = round(100 * (df["k_n"] == 4).mean(), 1)
-    out["corr_n_k"]    = round(float(df[["n", "k_n"]].corr().iloc[0, 1]), 4)
-    out["corr_n_s"]    = round(float(df[["n", "s_n"]].corr().iloc[0, 1]), 4)
+    a = df[df["assessed"]]
+    out["n_rows"]     = len(df)
+    out["n_assessed"] = len(a)
+    out["n_range"]    = (int(df["n"].min()), int(df["n"].max()))
+    out["k_dist"]     = df["k_n"].value_counts().sort_index().to_dict()
+    out["hr_ns"]      = sorted(df[df["is_hex_resonance"]]["n"].tolist())
+    big = df[df["n"] >= 6]
+    out["hr_law_holds"] = bool((((big["n"] % 6 == 0) == (big["k_n"] == 6))).all())
+    out["mt_ns"]      = sorted(a[a["is_max_tense"] & ~a["is_hex_resonance"]]["n"].tolist())
+    out["mp_ns"]      = sorted(df[df["is_multiple_placements"]]["n"].tolist())
+    out["first_mp"]   = int(df[df["is_multiple_placements"]]["n"].min()) if out["mp_ns"] else None
+    out["first_skip"] = int(df[df["uses_skipping"]]["n"].min()) if df["uses_skipping"].any() else None
+    out["s_max"]      = int(df["s_n"].max())
+    out["s_max_first_n"] = int(df.loc[df["s_n"].idxmax(), "n"])
+    out["s_monotone"] = bool(df.sort_values("n")["s_n"].is_monotonic_increasing)
+    out["tension_dist"] = df["tension_state"].value_counts().to_dict()
+    out["pct_k6"] = round(100 * df["is_hex_resonance"].mean(), 1)
+    out["pct_k5"] = round(100 * (df["k_n"] == 5).mean(), 1)
+    out["pct_k4"] = round(100 * (df["k_n"] == 4).mean(), 1)
+    out["corr_n_k"] = round(float(df[["n", "k_n"]].corr().iloc[0, 1]), 4)
+    out["corr_n_s"] = round(float(df[["n", "s_n"]].corr().iloc[0, 1]), 4)
 
-    # formula accuracy
-    err_s  = (df["s_n"] - df["s_simple"]).abs()
-    err_r  = (df["s_n"] - df["s_refined"]).abs()
-    out["simple_mae"]  = round(float(err_s.mean()), 4)
-    out["refined_mae"] = round(float(err_r.mean()), 4)
-    out["simple_exact_pct"]  = round(100 * (err_s == 0).mean(), 1)
-    out["refined_exact_pct"] = round(100 * (err_r == 0).mean(), 1)
+    # formula accuracy / data validation
+    err_old = (df["s_n"] - df["s_simple"]).abs()
+    err_s   = (df["s_n"] - df["s_exact"]).abs()
+    err_k   = (df["k_n"] - df["k_exact"]).abs()
+    out["simple_mae"]       = round(float(err_old.mean()), 4)
+    out["simple_exact_pct"] = round(100 * (err_old == 0).mean(), 1)
+    out["exact_mae"]        = round(float(err_s.mean()), 4)
+    out["exact_pct"]        = round(100 * (err_s == 0).mean(), 1)
+    out["k_exact_pct"]      = round(100 * (err_k == 0).mean(), 1)
+    out["bad_s_ns"] = sorted(df[err_s != 0]["n"].tolist())
+    out["bad_k_ns"] = sorted(df[err_k != 0]["n"].tolist())
+
+    # H4: Maximally-Tense label at k = 6 points (assessed rows only)
+    hr_a = a[(a["n"] > 12) & a["is_hex_resonance"]]
+    out["h4_ok"]         = sorted(hr_a[hr_a["is_max_tense"]]["n"].tolist())
+    out["h4_exceptions"] = sorted(hr_a[~hr_a["is_max_tense"]]["n"].tolist())
     return out
 
 def generate_insights(df: pd.DataFrame, eda: dict) -> list[tuple[str, str]]:
     """Return list of (marker, insight_text) tuples."""
     ins = []
-    ins.append(("HEX", f"Hexagonal Resonance Law confirmed: k(n) = 6 iff 6 divides n. Verified at n in {eda['hr_ns']}."))
-    ins.append(("NOTE", f"For all non-multiples of 6 with n >= 7, k(n) in {{4, 5}}. k(n) = 4 observed at n in {sorted(df[df['k_n']==4]['n'].tolist())}."))
-    ins.append(("DATA", f"Dataset spans n = {eda['n_range'][0]} to {eda['n_range'][1]} ({eda['n_rows']} data-rows). k=6: {eda['pct_k6']}%, k=5: {eda['pct_k5']}%, k=4: {eda['pct_k4']}%."))
-    ins.append(("STEP", f"Step-back in s(n): s(17) = 2, but s(18) = 1 - a deliberate 'step-back' that allows the 6-fold arrangement to close exactly."))
-    ins.append(("SKIP", f"Vertex skipping first required at n = {eda['first_skip']} (s = 1). Maximum s(n) observed: s = {eda['s_max']} at n = 174 = 6 x 29."))
+    hi = eda["n_range"][1]
+    ins.append(("HEX", f"Hexagonal Resonance Law: k(n) = 6 iff 6 divides n - "
+                       f"{'holds' if eda['hr_law_holds'] else 'FAILS'} on every row from n = 6 to {hi} "
+                       f"({len(eda['hr_ns'])} multiples of 6). It follows from k(n) = floor(n / ceil(n/6))."))
+    k3 = sorted(df[(df["k_n"] == 3) & (df["n"] >= 7)]["n"].tolist())
+    k4 = sorted(df[(df["k_n"] == 4) & (df["n"] >= 7)]["n"].tolist())
+    ins.append(("NOTE", f"For n >= 7: k(n) = 3 at n in {k3}, k(n) = 4 at n in {k4}, and k(n) = 5 at every other "
+                        f"non-multiple of 6 - in particular for all non-multiples of 6 from n = 20 upward."))
+    ins.append(("DATA", f"Dataset spans n = {eda['n_range'][0]} to {hi} ({eda['n_rows']} rows, "
+                        f"{eda['n_assessed']} with tension labels). k=6: {eda['pct_k6']}%, k=5: {eda['pct_k5']}%, k=4: {eda['pct_k4']}%."))
+    bad = sorted(set(eda["bad_s_ns"]) | set(eda["bad_k_ns"]))
+    ins.append(("MODEL", "Neighbours are full-edge reflections of the central polygon; the smallest non-overlapping edge "
+                         "spacing is ceil(n/6), so k(n) = floor(n/ceil(n/6)) and s(n) = max(0, ceil(n/6) - 2). "
+                         + (f"Data agrees with both formulas on every row." if not bad
+                            else f"Rows that DISAGREE with the model: n in {bad}.")))
+    ins.append(("STEP", "s(n) is monotone non-decreasing on this dataset - there is no step-back."
+                        if eda["s_monotone"] else
+                        "s(n) is NOT monotone on this dataset - check the rows flagged in the EDA tab."))
+    ins.append(("SKIP", f"Vertex skipping first required at n = {eda['first_skip']} (s = 1). Maximum s(n) observed: "
+                        f"s = {eda['s_max']}, first reached at n = {eda['s_max_first_n']}."))
     if eda["first_mp"]:
-        ins.append((f"ISOMER", f"Positional isomers (Multiple Placements) first emerge at n = {eda['first_mp']}, observed at n in {eda['mp_ns']}."))
-    ins.append((f"CORR", f"Pearson correlation n<->k(n) = {eda['corr_n_k']} (near zero - k oscillates). Pearson correlation n<->s(n) = {eda['corr_n_s']} (strong positive - s grows with n)."))
-    ins.append((f"FORMULA", f"s(n) formula accuracy - Simple MAE = {eda['simple_mae']}, exact {eda['simple_exact_pct']}% of rows. Refined MAE = {eda['refined_mae']}, exact {eda['refined_exact_pct']}% of rows."))
-    ins.append((f"REGIME", f"Regime change in s(6m): s(6m) = m-2 holds for m in [3,9], but s(174) = 29 = m, not m-2. Transition region m in [10,28] is uncharacterised."))
-    ins.append((f"TENSE", "Maximally Tense states are not instability precursors - they are the geometric conditions that enable k = 6. All k(n)=6 points for n > 12 carry a Maximally Tense label."))
+        ins.append(("ISOMER", f"Positional isomers (Multiple Placements) first emerge at n = {eda['first_mp']}; "
+                              f"labelled for n in {eda['mp_ns'][0]}..{eda['mp_ns'][-1]} (rows n > 55 are not assessed yet)."))
+    ins.append(("CORR", f"Pearson correlation n<->k(n) = {eda['corr_n_k']} (near zero - k oscillates). "
+                        f"Pearson correlation n<->s(n) = {eda['corr_n_s']} (strong positive - s grows with n)."))
+    ins.append(("FORMULA", f"Exact formula max(0, ceil(n/6)-2): MAE = {eda['exact_mae']}, exact on {eda['exact_pct']}% of rows. "
+                           f"The old approximation floor((n-6)/6): MAE = {eda['simple_mae']}, exact on {eda['simple_exact_pct']}% "
+                           f"- right at non-multiples of 6, one too high at multiples of 6."))
+    exc = eda["h4_exceptions"]
+    ins.append(("TENSE", f"Among assessed rows with n > 12, k(n) = 6 carries a Maximally Tense label at n in {eda['h4_ok']}"
+                         + (f"; exceptions: n in {exc} (labelled differently)." if exc else ".")
+                         + " Maximally Tense states are conditions that enable k = 6, not instability precursors."))
     return ins
 
 # ---------------------------------------------------------------------------
@@ -284,6 +334,10 @@ plt.rcParams.update({
     "axes.titlesize"   : 13,
     "axes.labelsize"   : 11,
 })
+
+def _label_ok(n) -> bool:
+    """Only label a sparse subset of points so dense plots (n up to 400) stay readable."""
+    return n <= 60 or n % 60 == 0 or n == 174
 
 def _add_hr_vlines(ax, df):
     for n in df[df["is_hex_resonance"]]["n"]:
@@ -306,7 +360,7 @@ def fig_k_vs_n(df: pd.DataFrame) -> plt.Figure:
     k6 = df[df["is_hex_resonance"]]
     ax.scatter(k6["n"], k6["k_n"], s=200, color=C["k6"], zorder=6,
                edgecolors="white", lw=0.8, label="Hexagonal Resonance (k=6)")
-    for _, r in k6.iterrows():
+    for _, r in k6[k6["n"].apply(_label_ok)].iterrows():
         ax.text(r["n"], r["k_n"] + 0.22, f"n={r['n']}", color=C["k6"],
                 fontsize=7.5, ha="center", fontweight="bold")
 
@@ -333,39 +387,32 @@ def fig_k_vs_n(df: pd.DataFrame) -> plt.Figure:
 # -- Plot 2: s(n) vs n ------------------------------------------------------
 def fig_s_vs_n(df: pd.DataFrame) -> plt.Figure:
     fig, ax = plt.subplots(figsize=(13, 6))
+
     ax.step(df["n"], df["s_n"], where="mid", color=C["s_line"],
-            lw=1.8, ls="--", marker="o", ms=4, label="Actual s(n)", zorder=3)
+            lw=1.8, ls="--", marker="o", ms=3, label="Data s(n)", zorder=3)
 
     n_cont = np.arange(df["n"].min(), df["n"].max() + 2)
-    ax.plot(n_cont, [s_simple(n)  for n in n_cont], color=C["approx"],
-            lw=1.3, ls=":", label="Simple: max(0, floor((n-6)/6))", zorder=1)
-    ax.plot(n_cont, [s_refined(n) for n in n_cont], color=C["refined"],
-            lw=1.3, ls="-.", label="Refined piecewise", zorder=1)
+    ax.plot(n_cont, [s_exact(n) for n in n_cont], color=C["refined"],
+            lw=1.3, ls="-", label="Exact: max(0, ceil(n/6) - 2)", zorder=2)
+    ax.plot(n_cont, [s_simple(n) for n in n_cont], color=C["approx"],
+            lw=1.3, ls=":", label="Old approx: max(0, floor((n-6)/6))", zorder=1)
 
     k6 = df[df["is_hex_resonance"]]
-    ax.scatter(k6["n"], k6["s_n"], s=180, color=C["k6"], marker="*",
+    ax.scatter(k6["n"], k6["s_n"], s=110, color=C["k6"], marker="*",
                zorder=6, edgecolors="white", lw=0.6,
                label="s(n) at Hexagonal Resonance")
-    for _, r in k6.iterrows():
+    for _, r in k6[k6["n"].apply(_label_ok)].iterrows():
         ax.text(r["n"], r["s_n"] + 0.25, f"n={r['n']},s={r['s_n']}",
                 color=C["k6"], fontsize=7, ha="center", fontweight="bold")
 
     mt = df[df["is_max_tense"] & ~df["is_hex_resonance"]]
-    ax.scatter(mt["n"], mt["s_n"], s=120, color=C["mt"], marker="X",
+    ax.scatter(mt["n"], mt["s_n"], s=100, color=C["mt"], marker="X",
                zorder=5, edgecolors="black", lw=0.4, label="Maximally Tense")
 
-    _add_hr_vlines(ax, df)
-
-    ax.annotate("Step-back!\ns(18)=1 < s(17)=2",
-                xy=(18, 1), xytext=(26, 3.8),
-                fontsize=8, color=C["k6"],
-                arrowprops=dict(arrowstyle="->", color=C["k6"], lw=1.1),
-                bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=C["k6"], alpha=0.9))
-
-    ax.set_title("s(n) Vertex Skipping vs. n - with Formula Overlays",
+    ax.set_title("s(n) Vertex Skipping vs. n - monotone, matches max(0, ceil(n/6) - 2)",
                  fontweight="bold", pad=12)
     ax.set_xlabel("n (Number of Vertices)", fontweight="bold")
-    ax.set_ylabel("s(n) (Number of Vertices Skipped)", fontweight="bold")
+    ax.set_ylabel("s(n) (Untouched vertices between neighbours)", fontweight="bold")
     ax.set_ylim(-0.5, df["s_n"].max() + 3)
     ax.legend(fontsize=8.5, loc="upper left")
     fig.tight_layout()
@@ -395,9 +442,10 @@ def fig_dual_axis(df: pd.DataFrame) -> plt.Figure:
                 edgecolors="white", lw=0.8, label="s(n) at HR")
     for _, r in k6.iterrows():
         ax1.axvline(r["n"], color=C["k6"], ls="--", lw=0.6, alpha=0.28)
-        ax1.text(r["n"] + 0.4, r["k_n"] + 0.28,
-                 f"n={r['n']},s={r['s_n']}", color=C["k6"],
-                 fontsize=7.5, ha="left", fontweight="bold")
+        if _label_ok(r["n"]):
+            ax1.text(r["n"] + 0.4, r["k_n"] + 0.28,
+                     f"n={r['n']},s={r['s_n']}", color=C["k6"],
+                     fontsize=7.5, ha="left", fontweight="bold")
 
     mt = df[df["is_max_tense"] & ~df["is_hex_resonance"]]
     ax1.scatter(mt["n"], mt["k_n"], s=120, color=C["mt"], marker="X",
@@ -419,10 +467,11 @@ def fig_dual_axis(df: pd.DataFrame) -> plt.Figure:
 # -- Plot 4: Heatmap --------------------------------------------------------
 def fig_heatmap(df: pd.DataFrame) -> plt.Figure:
     heat = df[["n", "k_n", "s_n"]].set_index("n").T
-    width = max(16, len(df) * 0.42)
+    dense = len(df) > 90
+    width = min(40, max(16, len(df) * 0.42))
     fig, ax = plt.subplots(figsize=(width, 3.8))
-    sns.heatmap(heat, annot=True, cmap="YlGnBu", fmt="d",
-                linewidths=0.35, linecolor="#CCCCCC",
+    sns.heatmap(heat, annot=not dense, cmap="YlGnBu", fmt="d",
+                linewidths=0 if dense else 0.35, linecolor="#CCCCCC",
                 cbar_kws={"label": "Value", "shrink": 0.7}, ax=ax)
     ax.set_title("Heatmap: k(n) & s(n) vs. n", fontweight="bold", pad=10)
     ax.set_xlabel("n (Number of Vertices)", fontweight="bold")
@@ -433,26 +482,28 @@ def fig_heatmap(df: pd.DataFrame) -> plt.Figure:
 
 # -- Plot 5: s(n) vs k(n) ---------------------------------------------------
 def fig_s_vs_k(df: pd.DataFrame) -> plt.Figure:
-    fig, ax = plt.subplots(figsize=(11, 8))
+    fig, ax = plt.subplots(figsize=(13, 8))
     rng = np.random.default_rng(42)
     seen = set()
     for _, row in df.iterrows():
-        st = str(row["tension_state"]).strip()
-        col = tension_color(st)
-        lbl = st if st not in seen else "_nolegend_"
-        seen.add(st)
+        st_ = str(row["tension_state"]).strip()
+        col = tension_color(st_)
+        lbl = st_ if st_ not in seen else "_nolegend_"
+        seen.add(st_)
         jitter = rng.uniform(-0.06, 0.06)
         ax.scatter(row["s_n"] + jitter, row["k_n"] + rng.uniform(-0.04, 0.04),
-                   color=col, s=120, alpha=0.80, edgecolors="black",
+                   color=col, s=70, alpha=0.80, edgecolors="black",
                    lw=0.3, label=lbl, zorder=4)
-        ax.text(row["s_n"] + jitter + 0.10, row["k_n"] + 0.05,
-                f"n={row['n']}", fontsize=6.5, alpha=0.82)
+        if _label_ok(row["n"]):
+            ax.text(row["s_n"] + jitter + 0.10, row["k_n"] + 0.05,
+                    f"n={row['n']}", fontsize=6.5, alpha=0.82)
 
     ax.set_title("s(n) vs. k(n) - Annotated by n & Tension State",
                  fontweight="bold", pad=12)
     ax.set_xlabel("s(n) (Vertices Skipped)", fontweight="bold")
     ax.set_ylabel("k(n) (Conjoinability)", fontweight="bold")
-    ax.set_xticks(range(int(df["s_n"].min()), int(df["s_n"].max()) + 1))
+    s_hi = int(df["s_n"].max())
+    ax.set_xticks(range(int(df["s_n"].min()), s_hi + 1, max(1, s_hi // 25)))
     ax.set_yticks(range(int(df["k_n"].min()), int(df["k_n"].max()) + 1))
     ax.legend(title="Tension State", bbox_to_anchor=(1.02, 1),
               loc="upper left", fontsize=7, title_fontsize=9)
@@ -461,6 +512,7 @@ def fig_s_vs_k(df: pd.DataFrame) -> plt.Figure:
 
 # -- Plot 6: Isomer Emergence ----------------------------------------------
 def fig_isomer_emergence(df: pd.DataFrame) -> plt.Figure:
+    df = df[df["assessed"]]          # isomer labels exist only for assessed rows
     fig, axes = plt.subplots(2, 1, figsize=(13, 9))
     fig.suptitle("Positional Isomer (Multiple Placement) Emergence vs. n",
                  fontsize=13, fontweight="bold")
@@ -490,7 +542,7 @@ def fig_isomer_emergence(df: pd.DataFrame) -> plt.Figure:
                     edgecolors="white", lw=0.5)
     axes[1].plot(df["n"], df["k_n"], color=C["k_line"], alpha=0.25, lw=1.2)
     if first_mp:
-        axes[1].axvspan(first_mp, df["n"].max() + 5,
+        axes[1].axvspan(first_mp, df[df["is_multiple_placements"]]["n"].max() + 0.5,
                         alpha=0.06, color=C["mp"], label=f"MP region (n >= {first_mp})")
         axes[1].axvline(first_mp, color="orange", lw=1.5, ls="--")
     hr = df[df["is_hex_resonance"]]
@@ -513,78 +565,66 @@ def fig_formula_analysis(df: pd.DataFrame) -> plt.Figure:
 
     fig, axes = plt.subplots(2, 2, figsize=(16, 11))
     fig.suptitle(
-        "s(n) Vertex Skipping - Formula Analysis & Approximations\n"
+        "s(n) Vertex Skipping - Exact Formula  s(n) = max(0, ceil(n/6) - 2)\n"
         "Muhammad Zaid Bilal - Polygon Conjoinability Research",
         fontsize=12, fontweight="bold", y=1.01)
 
     k6 = df[df["is_hex_resonance"]]
 
-    # Panel A - Actual + overlays
+    # Panel A - Data + formulas
     ax = axes[0, 0]
-    ax.scatter(n_vals, s_actual, color=C["s_line"], s=65, zorder=5,
-               edgecolors="white", lw=0.5, label="Actual s(n)")
-    ax.step(n_vals, s_actual, where="mid", color=C["s_line"], alpha=0.4, lw=1.1)
-    ax.plot(n_cont, [s_simple(n)  for n in n_cont], color=C["approx"],
-            lw=1.4, ls=":", label="Simple: max(0,floor((n-6)/6))")
-    ax.plot(n_cont, [s_refined(n) for n in n_cont], color=C["refined"],
-            lw=1.4, ls="-.", label="Refined piecewise")
-    ax.scatter(k6["n"], k6["s_n"], s=160, marker="*", color=C["k6"],
-               zorder=6, edgecolors="white", lw=0.5, label="HR points")
-    ax.annotate("Step-back\ns(18)=1 < s(17)=2",
-                xy=(18, 1), xytext=(26, 4.5), fontsize=8, color=C["k6"],
-                arrowprops=dict(arrowstyle="->", color=C["k6"], lw=1.0),
-                bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=C["k6"], alpha=0.9))
-    ax.set_title("A - Actual s(n) vs. Approximations", fontsize=11, fontweight="bold")
+    ax.scatter(n_vals, s_actual, color=C["s_line"], s=28, zorder=5,
+               edgecolors="white", lw=0.4, label="Data s(n)")
+    ax.plot(n_cont, [s_exact(n) for n in n_cont], color=C["refined"],
+            lw=1.5, ls="-", label="Exact: max(0, ceil(n/6) - 2)")
+    ax.plot(n_cont, [s_simple(n) for n in n_cont], color=C["approx"],
+            lw=1.3, ls=":", label="Old approx: max(0, floor((n-6)/6))")
+    ax.scatter(k6["n"], k6["s_n"], s=70, marker="*", color=C["k6"],
+               zorder=6, edgecolors="white", lw=0.4, label="HR points (6 | n)")
+    ax.set_title("A - Data vs. Formulas", fontsize=11, fontweight="bold")
     ax.set_xlabel("n"); ax.set_ylabel("s(n)")
     ax.legend(fontsize=7.5)
     ax.set_ylim(-0.5, s_actual.max() + 3)
 
     # Panel B - Residuals
     ax = axes[0, 1]
-    err_s = s_actual - np.array([s_simple(n)  for n in n_vals])
-    err_r = s_actual - np.array([s_refined(n) for n in n_vals])
-    w = 0.35
-    ax.bar(n_vals - w / 2, err_s, width=w, color=C["approx"],  alpha=0.82, label="Simple error")
-    ax.bar(n_vals + w / 2, err_r, width=w, color=C["refined"], alpha=0.82, label="Refined error")
+    err_old = s_actual - np.array([s_simple(n) for n in n_vals])
+    err_new = s_actual - np.array([s_exact(n) for n in n_vals])
+    ax.bar(n_vals, err_old, width=0.8, color=C["approx"], alpha=0.75,
+           label="Old approx error (-1 at every multiple of 6)")
+    ax.plot(n_vals, err_new, color=C["refined"], lw=1.6, marker="o", ms=2.5,
+            label="Exact-formula error (0 when data is clean)")
     ax.axhline(0, color="black", lw=0.8)
-    ax.scatter(k6["n"], [0] * len(k6), s=70, marker="*", color=C["k6"],
-               zorder=6, label="HR points")
-    ax.set_title("B - Residuals: Actual - Predicted", fontsize=11, fontweight="bold")
-    ax.set_xlabel("n"); ax.set_ylabel("Error (actual - predicted)")
+    ax.set_title("B - Residuals: Data - Formula", fontsize=11, fontweight="bold")
+    ax.set_xlabel("n"); ax.set_ylabel("Error (data - formula)")
     ax.legend(fontsize=8)
 
-    # Panel C - s(6m) at HR vs m
+    # Panel C - s(6m) vs m
     ax = axes[1, 0]
     hr_e = k6.copy(); hr_e["m"] = hr_e["n"] // 6
-    ax.scatter(hr_e["m"], hr_e["s_n"], s=140, color=C["k6"], zorder=5,
-               edgecolors="white", lw=0.5, label="Empirical s(6m)")
-    for _, row in hr_e.iterrows():
-        ax.text(row["m"] + 0.08, row["s_n"] + 0.18,
-                f"n={row['n']}", fontsize=7.5, color=C["k6"])
-    m_r = np.arange(1, 31)
-    ax.plot(m_r, np.where(m_r <= 2, 0, m_r - 2), ls="--", color="#805AD5",
-            lw=1.5, label="s = m-2  (m <= 9)")
-    ax.plot(m_r, np.where(m_r <= 2, 0, m_r),      ls="-.", color="#2C7A7B",
-            lw=1.5, label="s = m   (m = 29)")
-    ax.axvspan(9, 29, alpha=0.07, color="gold",
-               label="Uncharacterised transition m in [10,28]")
+    ax.scatter(hr_e["m"], hr_e["s_n"], s=45, color=C["k6"], zorder=5,
+               edgecolors="white", lw=0.4, label="Data s(6m)")
+    m_r = np.arange(1, max(hr_e["m"].max() if len(hr_e) else 2, 2) + 2)
+    ax.plot(m_r, np.maximum(0, m_r - 2), ls="--", color="#805AD5", lw=1.5,
+            label="s = m - 2  (all m >= 2)")
+    if len(hr_e):
+        sel = hr_e[hr_e["n"].apply(_label_ok)]
+        for _, row in sel.iterrows():
+            ax.text(row["m"] + 0.2, row["s_n"] - 0.9, f"n={row['n']}", fontsize=7, color=C["k6"])
     ax.set_title("C - s(6m) at Hexagonal Resonance vs. m", fontsize=11, fontweight="bold")
     ax.set_xlabel("m  (n = 6m)"); ax.set_ylabel("s(n)")
     ax.legend(fontsize=7.5)
-    ax.set_ylim(-1, m_r.max() + 2)
 
-    # Panel D - s(n)/m ratio convergence
+    # Panel D - s(6m)/m -> 1
     ax = axes[1, 1]
-    hr_e["ratio"] = hr_e["s_n"] / hr_e["m"]
-    ax.scatter(hr_e["m"], hr_e["ratio"], s=130, color=C["k6"], zorder=5,
-               edgecolors="white", lw=0.5, label="s(n)/m empirical")
-    for _, row in hr_e.iterrows():
-        ax.text(row["m"] + 0.18, row["ratio"] + 0.01,
-                f"n={int(row['n'])}", fontsize=7.5, color=C["k6"])
-    ax.axhline(1.0, color="#2C7A7B", lw=1.4, ls="--", label="Limit  s/m -> 1")
-    m_cont = np.linspace(1, 30, 300)
-    ax.plot(m_cont, (m_cont - 2) / m_cont, color="#805AD5", lw=1.4,
+    if len(hr_e):
+        hr_e["ratio"] = hr_e["s_n"] / hr_e["m"]
+        ax.scatter(hr_e["m"], hr_e["ratio"], s=45, color=C["k6"], zorder=5,
+                   edgecolors="white", lw=0.4, label="s(n)/m data")
+    m_cont = np.linspace(1, m_r.max(), 400)
+    ax.plot(m_cont, np.maximum(0, (m_cont - 2) / m_cont), color="#805AD5", lw=1.4,
             ls="-.", label="(m-2)/m curve")
+    ax.axhline(1.0, color="#2C7A7B", lw=1.4, ls="--", label="Limit  s/m -> 1")
     ax.set_title("D - Ratio s(6m)/m -> 1 as m -> infinity", fontsize=11, fontweight="bold")
     ax.set_xlabel("m  (n = 6m)"); ax.set_ylabel("s(n) / m")
     ax.set_ylim(-0.1, 1.15)
@@ -662,6 +702,121 @@ def mpl_to_st(fig: plt.Figure):
     st.image(buf, use_container_width=True)
     plt.close(fig)
 
+# ---------------------------------------------------------------------------
+# GEOMETRIC SOLVER TAB (uses Polygon_solver.py)
+# ---------------------------------------------------------------------------
+@st.cache_data(show_spinner=False)
+def solve_cached(n: int) -> dict:
+    """Exact geometric solution for one n (cached)."""
+    sol = ps.solve(int(n))
+    return dict(n=sol.n, spacing=sol.spacing, k=sol.k, s=sol.s, slack=sol.slack,
+                overlap_below=sol.overlap_below, arrangement=ps.arrangement(sol.n))
+
+def fig_arrangement(n: int, sol: dict) -> plt.Figure:
+    """Central n-gon with its k neighbours; untouched central vertices drawn in red."""
+    fig, ax = plt.subplots(figsize=(8, 8))
+    central = ps.regular_polygon(n)
+    ax.add_patch(mpatches.Polygon(central, closed=True, fc="#BEE3F8", ec=C["k_line"], lw=1.6, zorder=2))
+    edge, touched = 0, set()
+    for i, gap in enumerate(sol["arrangement"]):
+        xs, ys = ps.neighbour(n, edge).exterior.xy
+        ax.add_patch(mpatches.Polygon(list(zip(xs, ys)), closed=True,
+                                      fc="#C6F6D5" if i % 2 == 0 else "#FEEBC8",
+                                      ec=C["k6"] if i % 2 == 0 else C["mp"], lw=1.1, alpha=0.9, zorder=1))
+        touched.update({edge % n, (edge + 1) % n})
+        edge += gap
+    if n <= 150:
+        for i, (x, y) in enumerate(central):
+            ax.scatter(x, y, s=24 if n <= 60 else 9, zorder=5,
+                       color=C["k_line"] if i in touched else C["mt"])
+    ax.set_xlim(-3.2, 3.2); ax.set_ylim(-3.2, 3.2); ax.set_aspect("equal"); ax.axis("off")
+    ax.set_title(f"n = {n}:  k = {sol['k']} neighbours,  s = {sol['s']} untouched vertices between them "
+                 f"(edge spacing {sol['spacing']}, slack {sol['slack']})", fontsize=11, fontweight="bold")
+    fig.tight_layout()
+    return fig
+
+def render_solver_tab(df: pd.DataFrame):
+    st.subheader("Geometric Solver")
+    if not SOLVER_OK:
+        st.error(f"`Polygon_solver` could not be imported ({SOLVER_ERR}). "
+                 "Keep `Polygon_solver.py` next to this script and run `pip install shapely`.")
+        return
+    st.markdown(
+        "Neighbours are copies of the central regular n-gon attached to one full edge (reflections). "
+        "**k(n)** = how many fit without overlapping; **s(n)** = untouched vertices of the central polygon "
+        "between two adjacent neighbours at the tightest packing. The solver finds the smallest "
+        "non-overlapping edge spacing by exact polygon intersection, independently of the spreadsheet.")
+
+    # ---- A: one polygon -----------------------------------------------------
+    st.markdown("#### A - Solve and draw one polygon")
+    n = int(st.number_input("n (number of vertices)", min_value=3, max_value=600, value=25, step=1, key="solver_n"))
+    sol = solve_cached(n)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("k(n)", sol["k"]); c2.metric("s(n)", sol["s"])
+    c3.metric("min edge spacing", sol["spacing"]); c4.metric("slack edges", sol["slack"])
+    row = df[df["n"] == n]
+    if len(row):
+        r = row.iloc[0]
+        if (int(r["k_n"]), int(r["s_n"])) == (sol["k"], sol["s"]):
+            st.success(f"Data row n = {n} matches the solver (k = {sol['k']}, s = {sol['s']}).")
+        else:
+            st.error(f"Data row n = {n} says k = {int(r['k_n'])}, s = {int(r['s_n'])}, "
+                     f"but the geometry gives k = {sol['k']}, s = {sol['s']}.")
+    else:
+        st.info(f"n = {n} is not in the loaded dataset.")
+    arr = sol["arrangement"]
+    arr_txt = str(arr) if len(arr) <= 24 else f"{arr[:12]} ... ({len(arr)} spacings)"
+    st.caption(f"Closed forms: k = {ps.k_closed(n)}, s = {ps.s_closed(n)}.  "
+               f"One valid arrangement (edge spacings, sum = n): {arr_txt}.  "
+               "Red dots = central vertices touched by no neighbour.")
+    mpl_to_st(fig_arrangement(n, sol))
+
+    # ---- B: verify the dataset ---------------------------------------------
+    st.divider()
+    st.markdown("#### B - Check the loaded dataset against the exact solver")
+    lo, hi = int(df["n"].min()), int(df["n"].max())
+    n_hi = hi if hi <= lo else int(st.slider("Check rows up to n =", min_value=lo, max_value=hi,
+                                             value=hi, key="solver_nhi"))
+    if st.button("Run geometric check", key="solver_check"):
+        sub = df[df["n"] <= n_hi]
+        bar, recs = st.progress(0.0), []
+        for i, r in enumerate(sub.itertuples()):
+            g = solve_cached(int(r.n))
+            recs.append(dict(n=int(r.n), k_data=int(r.k_n), k_geometry=g["k"],
+                             s_data=int(r.s_n), s_geometry=g["s"],
+                             match=(int(r.k_n) == g["k"] and int(r.s_n) == g["s"])))
+            if i % 10 == 0:
+                bar.progress((i + 1) / len(sub))
+        bar.empty()
+        st.session_state["solver_check_result"] = (n_hi, pd.DataFrame(recs))
+    if "solver_check_result" in st.session_state:
+        n_done, res = st.session_state["solver_check_result"]
+        bad = res[~res["match"]]
+        if bad.empty:
+            st.success(f"All {len(res)} rows (n up to {n_done}) match the exact solver.")
+        else:
+            st.error(f"{len(bad)} of {len(res)} rows (n up to {n_done}) disagree with the exact solver.")
+            st.dataframe(bad, use_container_width=True, hide_index=True)
+        with st.expander("Full comparison"):
+            st.dataframe(res, use_container_width=True, hide_index=True)
+
+    # ---- C: generate / extend the table --------------------------------------
+    st.divider()
+    st.markdown("#### C - Generate or extend the table")
+    st.caption("k_n, s_n, vertex_skipping and uses_skipping come from the solver. Existing tension labels are "
+               "kept; new rows are marked 'Not assessed' with blank tension flags.")
+    n_max = int(st.number_input("Generate rows up to n =", min_value=10, max_value=600, value=400,
+                                step=10, key="solver_nmax"))
+    if st.button("Build table", key="solver_build"):
+        with st.spinner("Solving every n ..."):
+            existing = df.drop(columns=["plot_color", "hover"], errors="ignore")
+            st.session_state["solver_table"] = ps.build_table(3, n_max, existing=existing, workers=1)
+    if "solver_table" in st.session_state:
+        table = st.session_state["solver_table"]
+        st.dataframe(table, use_container_width=True, hide_index=True)
+        st.download_button("Download table CSV", data=table.to_csv(index=False).encode("utf-8"),
+                           file_name="polygon_conjoinability_generated.csv", mime="text/csv")
+
 def main():
     # -- Sidebar: file upload ------------------------------------------------
     st.sidebar.title("Polygon Conjoinability")
@@ -669,8 +824,8 @@ def main():
     st.sidebar.divider()
 
     uploaded = st.sidebar.file_uploader(
-        "Upload Excel file (.xlsx)", type=["xlsx"],
-        help="Upload your spreadsheet, or the app will look for 'Copy of spreadsheet_kn.xlsx' in the same folder.",
+        "Upload Excel (.xlsx) or cleaned CSV", type=["xlsx", "csv"],
+        help="Upload the corrected spreadsheet / CSV, or the app will look for 'spreadsheet_kn_corrected.xlsx', then 'Copy of spreadsheet_kn.xlsx', in the same folder.",
     )
 
     # Resolve file source
@@ -678,8 +833,9 @@ def main():
         file_src = uploaded
         file_label = uploaded.name
     else:
-        default = "Copy of spreadsheet_kn.xlsx"
-        if os.path.exists(default):
+        default = next((p for p in ("spreadsheet_kn_corrected.xlsx", "Copy of spreadsheet_kn.xlsx",
+                                    "polygon_conjoinability_Sheet1_corrected.csv") if os.path.exists(p)), None)
+        if default:
             file_src = default
             file_label = default
         else:
@@ -689,10 +845,10 @@ def main():
     # -- Load workbook & list sheets ----------------------------------------
     @st.cache_data(show_spinner="Reading workbook...")
     def load_workbook(src):
-        if hasattr(src, "read"):
-            xf = pd.ExcelFile(src)
-        else:
-            xf = pd.ExcelFile(src)
+        src_name = getattr(src, "name", src if isinstance(src, str) else "")
+        if str(src_name).lower().endswith(".csv"):
+            return {"CSV": pd.read_csv(src)}
+        xf = pd.ExcelFile(src)
         sheets = {}
         for name in xf.sheet_names:
             raw = xf.parse(name, header=0)
@@ -747,6 +903,11 @@ def main():
     st.sidebar.metric("HR points",  len(eda["hr_ns"]))
     st.sidebar.metric("k=6 share",  f"{eda['pct_k6']}%")
     st.sidebar.metric("Max s(n)",   eda["s_max"])
+    _bad = sorted(set(eda["bad_s_ns"]) | set(eda["bad_k_ns"]))
+    if _bad:
+        st.sidebar.warning(f"{len(_bad)} row(s) disagree with k(n)=floor(n/ceil(n/6)) / s(n)=max(0,ceil(n/6)-2): n = {_bad[:12]}{' ...' if len(_bad) > 12 else ''}")
+    else:
+        st.sidebar.success("All rows match the exact k(n) and s(n) formulas.")
     st.sidebar.markdown("---")
 
     # -- Sidebar: plot toggles ---------------------------------------------
@@ -772,11 +933,12 @@ def main():
     st.divider()
 
     # -- Tabs ---------------------------------------------------------------
-    tab_eda, tab_clean, tab_insights, tab_plots, tab_supp, tab_raw = st.tabs([
+    tab_eda, tab_clean, tab_insights, tab_plots, tab_solver, tab_supp, tab_raw = st.tabs([
         "EDA",
         "Data Cleaning",
         "Insights",
         "Visualisations",
+        "Geometric Solver",
         "Supplementary Sheets",
         "Raw Data",
     ])
@@ -822,11 +984,19 @@ def main():
 
             st.markdown("#### Formula Accuracy (s(n))")
             acc = {
-                "Formula"        : ["Simple", "Refined piecewise"],
-                "MAE"            : [eda["simple_mae"],        eda["refined_mae"]],
-                "Exact match %"  : [eda["simple_exact_pct"],  eda["refined_exact_pct"]],
+                "Formula"        : ["s exact: max(0, ceil(n/6)-2)", "s old approx: floor((n-6)/6)", "k exact: floor(n/ceil(n/6))"],
+                "MAE"            : [eda["exact_mae"], eda["simple_mae"], round(float((df["k_n"] - df["k_exact"]).abs().mean()), 4)],
+                "Exact match %"  : [eda["exact_pct"], eda["simple_exact_pct"], eda["k_exact_pct"]],
             }
             st.dataframe(pd.DataFrame(acc), use_container_width=True, hide_index=True)
+
+            st.markdown("#### Rows disagreeing with the model")
+            bad_df = df[(df["s_n"] != df["s_exact"]) | (df["k_n"] != df["k_exact"])][
+                ["n", "k_n", "k_exact", "s_n", "s_exact"]]
+            if bad_df.empty:
+                st.success("Every row matches k(n) = floor(n/ceil(n/6)) and s(n) = max(0, ceil(n/6)-2).")
+            else:
+                st.dataframe(bad_df, use_container_width=True, hide_index=True)
 
         st.divider()
         st.markdown("#### Descriptive Statistics")
@@ -855,14 +1025,15 @@ The following steps are applied automatically when the primary sheet is loaded:
 | 7 | Tension normalise | String `"0"` and `NaN` -> `"Normal"`; whitespace stripped |
 | 8 | Derived columns | `angle_rad`, `angle_deg` recomputed from `n` for accuracy |
 | 9 | Boolean flags | `is_hex_resonance`, `is_max_tense`, `is_multiple_placements`, `is_phase_shift`, `is_minimally_tense`, `uses_skipping` |
-| 10 | Formula cols | `s_simple` and `s_refined` computed for every row |
+| 10 | Formula cols | `s_exact`, `k_exact` (closed forms) and the superseded `s_simple` computed for every row; disagreements are flagged in the EDA tab |
 | 11 | Sort | Rows sorted ascending by `n` |
+| 12 | Assessed flag | Rows whose tension state is `Not assessed` (n > 55 except 174) are excluded from tension / isomer statistics |
 """)
         st.divider()
         st.markdown("#### After-cleaning preview (first 20 rows)")
         display_cols = ["n","k_n","s_n","angle_deg","tension_state",
                         "is_hex_resonance","is_max_tense","is_multiple_placements",
-                        "s_simple","s_refined"]
+                        "s_exact","k_exact"]
         st.dataframe(df[display_cols].head(20), use_container_width=True, hide_index=True)
 
         st.markdown("#### Null counts after cleaning")
@@ -893,10 +1064,11 @@ Falsified by the same data - discrete n = 6m achieves k = 6 for all m.
 """)
         with st.expander("REVISED Hypotheses", expanded=False):
             st.warning("""
-H2-Original - Monotonic Vertex Skipping Hypothesis (REVISED -> H2 Current)
+H2-Original - Monotonic Vertex Skipping Hypothesis (RESTORED -> H2 Current)
 s(n) is monotonically non-decreasing.
 
-Refuted by s(18)=1 < s(17)=2 (the "step-back"). Revised to Adaptive Optimisation.
+The apparent step-back s(18)=1 < s(17)=2 was a data-entry error (geometry gives s(17)=1).
+After correction s(n) is non-decreasing, so the original hypothesis stands.
 
 ---
 H3-Original - Maximally Tense = Instability Threshold (REFINED -> H4 Current)
@@ -907,16 +1079,16 @@ Refined: MT states are conditions enabling k = 6, not signs of instability.
         with st.expander("CURRENT Hypotheses (H1-H6)", expanded=True):
             st.success("""
 H1 - Hexagonal Resonance Law (Empirically validated)
-k(n) = 6 iff 6 divides n. Verified for n in {6,12,18,24,30,36,42,48,54,174}.
+k(n) = 6 iff 6 divides n. Follows from k(n) = floor(n/ceil(n/6)); checked by exact polygon intersection for every n in 3..400.
 
 H2 - Vertex Skipping Optimisation (Empirically supported)
-s(n) is an adaptive mechanism; s(6m) = m-2 for m in [3,9]; regime changes at m=29.
+s(n) = max(0, ceil(n/6) - 2): the smallest non-overlapping neighbour spacing is ceil(n/6) edges. s(6m) = m-2 for every m >= 3 - no regime change.
 
 H3 - Generating Function Isomorphism (Theoretical)
 A generating function P(x,y) models the periodic re-entry into k=6 states.
 
 H4 - Tense Perfectibility (Empirically validated)
-All k(n)=6 points for n > 12 occur at Maximally Tense states.
+All assessed k(n)=6 points for 12 < n <= 55 occur at Maximally Tense states; n=174 is labelled only "Hexagonal Resonance"; other n > 55 are not yet assessed.
 
 H5 - Discrete-to-Continuous Resonance (Theoretical)
 k(n) oscillations form a "geometric wave function" echoing the circle's k=6.
@@ -931,21 +1103,27 @@ At n >= 34, multiple placements create flexibility; HR collapses isomers to one 
             ("E1", "Discontinuity at infinity",
              "lim k(n) = 5 != k(infinity) = 6",
              "k(n) oscillates, touching 6 at every 6m; no real discontinuity"),
-            ("E2", "Monotonicity of s(n)",
-             "s(n) is non-decreasing",
-             "s(18)=1 < s(17)=2; step-backs are optimisations"),
+            ("E2", "Step-back in s(n)",
+             "s(18)=1 < s(17)=2, so s is not monotone",
+             "Data error: s(17)=1. s(n)=max(0, ceil(n/6)-2) is non-decreasing"),
             ("E3", "k(n) <= 5 for all n > 6",
              "No discrete polygon achieves k=6",
              "Falsified by k(36)=k(42)=k(48)=k(54)=k(174)=6"),
             ("E4", "Maximally Tense = lower k",
              "MT states precede transitions to higher s",
              "MT states enable k=6 - they are conditions of peak order"),
-            ("E5", "s(6m) = m-2 for all m >= 3",
-             "Formula holds universally",
-             "Breaks at m=29: s(174)=29=m, not m-2; transition region m in [10,28] unknown"),
+            ("E5", "Regime change at m=29",
+             "s(174)=29=m, not m-2; transition region m in [10,28] unknown",
+             "Data error: s(174)=27=m-2. The formula holds for all m >= 3; no transition region"),
             ("E6", "Angle notation at n=34",
              "Listed 32*pi/34 instead of canonical form",
              "Numerically correct but style-inconsistent; no data error"),
+            ("E7", "s(n) entries at n = 7-11, 14-17, 25, 26",
+             "Recorded 1, 2 and 2",
+             "Geometry gives 0, 1 and 3 (untouched vertices between neighbours)"),
+            ("E8", "k(7) = 4",
+             "Four neighbours fit around a heptagon",
+             "k(7) = 3: neighbours on adjacent edges overlap (interior angle > 120 deg)"),
         ], columns=["ID", "Name", "What Was Believed", "Correction"])
         st.dataframe(errors_df, use_container_width=True, hide_index=True)
 
@@ -1013,6 +1191,10 @@ At n >= 34, multiple placements create flexibility; HR collapses isomers to one 
 
             else:
                 st.dataframe(raw.head(20), use_container_width=True)
+
+    # -- TAB: GEOMETRIC SOLVER ---------------------------------------------
+    with tab_solver:
+        render_solver_tab(df)
 
     # -- TAB: RAW DATA ------------------------------------------------------
     with tab_raw:
