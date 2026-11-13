@@ -75,7 +75,11 @@ from shapely.geometry import Point, Polygon
 try:                                   # saved as Polygon_solver.py (also accept the lowercase name)
     import Polygon_solver as ps
 except ModuleNotFoundError:
-    import polygon_solver as ps
+    try:
+        import polygon_solver as ps
+    except ModuleNotFoundError:
+        raise ImportError("Polygon_solver.py must be in the same folder as Polygon_placements.py") from None
+
 
 __all__ = [
     "Placement", "contact_kind", "min_gap", "max_size", "is_valid", "verify_placement_geometry",

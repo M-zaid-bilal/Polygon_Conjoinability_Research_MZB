@@ -12,11 +12,12 @@ import pytest
 try:
     import Polygon_solver as ps
 except ModuleNotFoundError:
-    import polygon_solver as ps
+    raise ImportError("Polygon_solver.py must be in the same folder as Polygon_placements.py")
 try:
     import Polygon_placements as pp
 except ModuleNotFoundError:
-    import polygon_placements as pp
+    raise ImportError("Polygon_placements.py must be in the same folder as Polygon_solver.py")
+
 
 
 # --------------------------------------------------------------------------- brute force helpers

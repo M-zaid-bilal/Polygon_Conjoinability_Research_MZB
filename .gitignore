@@ -228,7 +228,9 @@ _pkginfo.txt
 *.[Cc]ache
 # but keep track of directories ending in .cache
 !?*.[Cc]ache/
-
+./conda
+./venv
+./new_venv
 # Others
 ClientBin/
 ~$*
@@ -362,3 +364,7 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 .ZoneIdentifier
+#add venv and new venv to ignore list
+./venv
+./conda
+./new_venv
