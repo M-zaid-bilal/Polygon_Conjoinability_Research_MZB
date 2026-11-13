@@ -70,6 +70,7 @@ from functools import lru_cache
 from typing import Iterator
 
 import pandas as pd
+from shapely.geometry import Point, Polygon
 
 try:                                   # saved as Polygon_solver.py (also accept the lowercase name)
     import Polygon_solver as ps
@@ -79,7 +80,7 @@ except ModuleNotFoundError:
 __all__ = [
     "Placement", "contact_kind", "min_gap", "max_size", "is_valid", "verify_placement_geometry",
     "conflict_distances", "check_conflict_structure",
-    "ChainPlacement", "chain_placements", "count_chain",
+    "ChainPlacement", "chain_placements", "count_chain", "contact_gap", "tension", "sawtooth_limit",
     "count_labelled", "count_classes", "count_by_size",
     "iter_placements", "list_placements", "to_dataframe",
 ]
@@ -242,6 +243,38 @@ def count_by_size(n: int) -> pd.DataFrame:
         rows.append({"size": t, "labelled": count_labelled(n, t),
                      "up_to_rotation": rot, "up_to_rotation_and_reflection": dih})
     return pd.DataFrame(rows)
+
+
+# --------------------------------------------------------------------------- tension
+def _difference_body(n: int) -> Polygon:
+    """D = P - P for the unit-circumradius regular n-gon P: 2P for even n, a regular 2n-gon for odd n."""
+    if n % 2 == 0:
+        return Polygon([(2 * math.cos(2 * math.pi * k / n), 2 * math.sin(2 * math.pi * k / n)) for k in range(n)])
+    rho = 2 * math.cos(math.pi / (2 * n))
+    return Polygon([(rho * math.cos((j + 0.5) * math.pi / n), rho * math.sin((j + 0.5) * math.pi / n))
+                    for j in range(2 * n)])
+
+
+@lru_cache(maxsize=None)
+def contact_gap(n: int) -> float:
+    """Tension tau(n) of the tightest packing: the distance between two neighbours whose edges are
+    m(n) apart, in units of the polygon's side.  It is 0 for n <= 6 and exactly when 6 divides n
+    for n >= 7 (report, Thm 7.1(i)-(ii)).  Closed form via the difference body D = P - P: for
+    translates of a convex body, dist(x+K, y+K) = dist(y-x, K-K)."""
+    m = min_gap(n)
+    a = math.cos(math.pi / n)
+    p0, pm = math.pi / n, 2 * math.pi * (m + 0.5) / n
+    c = (2 * a * (math.cos(pm) - math.cos(p0)), 2 * a * (math.sin(pm) - math.sin(p0)))
+    return max(0.0, _difference_body(n).distance(Point(c)) / (2 * math.sin(math.pi / n)))
+
+
+tension = contact_gap          # the name used in the report: tau(n)
+
+
+def sawtooth_limit(n: int) -> float:
+    """Limit profile of the tension: (sqrt(3)/6) * ((-n) mod 6).  For n >= 7, 6 not dividing n,
+    |tension(n) - limit| <= ((kappa^2)/2 + 1) * pi / n with kappa = (6 - n mod 6)/6 (report, Thm 7.1(iii))."""
+    return math.sqrt(3) / 6 * ((-n) % 6)
 
 
 # --------------------------------------------------------------------------- tight chains, BA fixed

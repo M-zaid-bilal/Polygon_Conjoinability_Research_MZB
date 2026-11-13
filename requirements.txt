@@ -1,7 +1,7 @@
 # Polygon Conjoinability Research - Python dependencies
 #
 # Python 3.10+ (tested on 3.12; the code itself needs 3.9+).  The lower bounds below were tested
-# together: all 79 tests, the solver and placements command lines and the dashboard pass on them.
+# together: all 100 tests, the solver and placements command lines and the dashboard pass on them.
 # The newest releases at the time of writing (streamlit 1.67, pandas 3.0, numpy 2.5, matplotlib 3.11,
 # plotly 7.1, shapely 2.2) were tested too.
 #

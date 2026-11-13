@@ -302,17 +302,16 @@ def compute_eda(df: pd.DataFrame) -> dict:
     out["bad_s_ns"] = sorted(df[err_s != 0]["n"].tolist())
     out["bad_k_ns"] = sorted(df[err_k != 0]["n"].tolist())
 
-    # H4: Maximally-Tense label at k = 6 points (assessed rows only)
-    hr_a = a[(a["n"] > 12) & a["is_hex_resonance"]]
-    out["h4_ok"]         = sorted(hr_a[hr_a["is_max_tense"]]["n"].tolist())
-    out["h4_exceptions"] = sorted(hr_a[~hr_a["is_max_tense"]]["n"].tolist())
+    # Tension labels versus k = 6 (assessed rows only). The label is not used as evidence for H4.
+    out["mt_all"]    = sorted(a[a["is_max_tense"]]["n"].tolist())
+    out["hr_not_mt"] = sorted(a[a["is_hex_resonance"] & ~a["is_max_tense"]]["n"].tolist())
     return out
 
 def generate_insights(df: pd.DataFrame, eda: dict) -> list[tuple[str, str]]:
     """Return list of (marker, insight_text) tuples."""
     ins = []
     hi = eda["n_range"][1]
-    ins.append(("HEX", f"Hexagonal Resonance Law: k(n) = 6 iff 6 divides n - "
+    ins.append(("HEX", f"Hexagonal resonance of the conjoinability k(n): k(n) = 6 iff 6 divides n - "
                        f"{'holds' if eda['hr_law_holds'] else 'FAILS'} on every row from n = 6 to {hi} "
                        f"({len(eda['hr_ns'])} multiples of 6). It follows from k(n) = floor(n / ceil(n/6))."))
     k3 = sorted(df[(df["k_n"] == 3) & (df["n"] >= 7)]["n"].tolist())
@@ -332,17 +331,17 @@ def generate_insights(df: pd.DataFrame, eda: dict) -> list[tuple[str, str]]:
     ins.append(("SKIP", f"Vertex skipping first required at n = {eda['first_skip']} (s = 1). Maximum s(n) observed: "
                         f"s = {eda['s_max']}, first reached at n = {eda['s_max_first_n']}."))
     if eda["first_mp"]:
-        ins.append(("ISOMER", f"Positional isomers (Multiple Placements) first emerge at n = {eda['first_mp']}; "
-                              f"labelled for n in {eda['mp_ns'][0]}..{eda['mp_ns'][-1]} (rows n > 55 are not assessed yet)."))
+        ins.append(("ISOMER", f"'Multiple Placements (N)' labels are set for n = {eda['mp_ns'][0]}..{eda['mp_ns'][-1]} and N is the number "
+                              f"of tight chains with BA fixed (3 for five neighbours). Such chains exist at every n with slack, from n = 7, "
+                              f"so the labels do not mark a threshold; rows outside this range are simply not labelled."))
     ins.append(("CORR", f"Pearson correlation n<->k(n) = {eda['corr_n_k']} (near zero - k oscillates). "
                         f"Pearson correlation n<->s(n) = {eda['corr_n_s']} (strong positive - s grows with n)."))
     ins.append(("FORMULA", f"Exact formula max(0, ceil(n/6)-2): MAE = {eda['exact_mae']}, exact on {eda['exact_pct']}% of rows. "
                            f"The old approximation floor((n-6)/6): MAE = {eda['simple_mae']}, exact on {eda['simple_exact_pct']}% "
                            f"- right at non-multiples of 6, one too high at multiples of 6."))
-    exc = eda["h4_exceptions"]
-    ins.append(("TENSE", f"Among assessed rows with n > 12, k(n) = 6 carries a Maximally Tense label at n in {eda['h4_ok']}"
-                         + (f"; exceptions: n in {exc} (labelled differently)." if exc else ".")
-                         + " Maximally Tense states are conditions that enable k = 6, not instability precursors."))
+    ins.append(("TENSE", f"Hand labels: 'Maximally Tense' at n in {eda['mt_all']}; k = 6 without that label at n in {eda['hr_not_mt']}. "
+                         "The labels are not a function of k. Proved replacement (report Thm 7.1): the tension tau(n) between "
+                         "adjacent tight neighbours is 0 iff 6 divides n iff k(n) = 6 (see Plot 10)."))
     return ins
 
 # ---------------------------------------------------------------------------
@@ -540,7 +539,7 @@ def fig_s_vs_k(df: pd.DataFrame) -> plt.Figure:
 def fig_isomer_emergence(df: pd.DataFrame) -> plt.Figure:
     df = df[df["assessed"]]          # isomer labels exist only for assessed rows
     fig, axes = plt.subplots(2, 1, figsize=(13, 9))
-    fig.suptitle("Positional Isomer (Multiple Placement) Emergence vs. n",
+    fig.suptitle("Rows Labelled Multiple Placements vs. n",
                  fontsize=13, fontweight="bold")
 
     iso = df["is_multiple_placements"].astype(int)
@@ -550,14 +549,14 @@ def fig_isomer_emergence(df: pd.DataFrame) -> plt.Figure:
     first_mp = df[df["is_multiple_placements"]]["n"].min() if iso.any() else None
     if first_mp:
         axes[0].axvline(first_mp, color="orange", lw=1.8, ls="--",
-                        label=f"First isomer at n={first_mp}")
+                        label=f"First labelled at n={first_mp}")
         for n_val in df[df["is_multiple_placements"]]["n"]:
             axes[0].text(n_val, 1.05, str(n_val), ha="center",
                          fontsize=6.5, color=C["mp"], rotation=90)
     axes[0].set_yticks([0, 1]); axes[0].set_yticklabels(["No", "Yes"])
     axes[0].set_ylabel("Multiple Placements?", fontweight="bold")
     axes[0].legend(fontsize=9)
-    axes[0].set_title("Presence of Positional Isomers", fontsize=11)
+    axes[0].set_title("Rows labelled Multiple Placements", fontsize=11)
 
     col2 = [C["k6"] if r["is_hex_resonance"]
              else C["mt"] if r["is_max_tense"]
@@ -569,7 +568,7 @@ def fig_isomer_emergence(df: pd.DataFrame) -> plt.Figure:
     axes[1].plot(df["n"], df["k_n"], color=C["k_line"], alpha=0.25, lw=1.2)
     if first_mp:
         axes[1].axvspan(first_mp, df[df["is_multiple_placements"]]["n"].max() + 0.5,
-                        alpha=0.06, color=C["mp"], label=f"MP region (n >= {first_mp})")
+                        alpha=0.06, color=C["mp"], label=f"labelled region (n >= {first_mp})")
         axes[1].axvline(first_mp, color="orange", lw=1.5, ls="--")
     hr = df[df["is_hex_resonance"]]
     axes[1].scatter(hr["n"], hr["k_n"], s=160, marker="*", color=C["k6"],
@@ -579,7 +578,7 @@ def fig_isomer_emergence(df: pd.DataFrame) -> plt.Figure:
     axes[1].set_xlabel("n (Number of Vertices)", fontweight="bold")
     axes[1].set_ylabel("k(n)", fontweight="bold")
     axes[1].legend(fontsize=8, loc="lower right")
-    axes[1].set_title("k(n) with Isomer Region Highlighted", fontsize=11)
+    axes[1].set_title("k(n) with the labelled region highlighted", fontsize=11)
     fig.tight_layout()
     return fig
 
@@ -674,6 +673,29 @@ def fig_angle_vs_s(df: pd.DataFrame) -> plt.Figure:
     axes[0].legend(title="Conjoinability", fontsize=8)
     fig.suptitle("Internal angle of the regular n-gon vs. number of vertices skipped",
                  fontweight="bold", fontsize=13)
+    fig.tight_layout()
+    return fig
+
+# -- Plot 10: tension and its sawtooth limit --------------------------------
+def fig_contact_gap(df: pd.DataFrame) -> plt.Figure:
+    """Formal H4 / H5: tension tau(n) = gap between adjacent tight neighbours, in sides (report Thm 7.1)."""
+    ns = [int(n) for n in df["n"] if n >= 7]
+    g = np.array([pl.contact_gap(n) for n in ns])
+    saw = np.array([pl.sawtooth_limit(n) for n in ns])
+    fig, axes = plt.subplots(2, 1, figsize=(13, 8), sharex=True, gridspec_kw={"height_ratios": [2, 1]})
+    ax = axes[0]
+    ax.scatter(ns, saw, s=22, marker="_", color=C["refined"], zorder=2, label="limit (sqrt3/6)*((-n) mod 6)")
+    ax.scatter(ns, g, s=14, color=C["k_line"], zorder=3, label="tension tau(n)")
+    zeros = [n for n, v in zip(ns, g) if v < 1e-9]
+    ax.scatter(zeros, [0] * len(zeros), s=45, marker="*", color=C["k6"], zorder=4, label="tau = 0  (6 divides n)")
+    ax.set_ylabel("tension: gap between adjacent neighbours (sides)", fontweight="bold")
+    ax.set_title("Tension tau(n): zero exactly at the hexagonal resonances, sawtooth of period 6 in the limit",
+                 fontweight="bold")
+    ax.legend(fontsize=8.5, loc="upper right")
+    axes[1].scatter(ns, np.array(ns) * np.abs(g - saw), s=10, color=C["s_line"])
+    axes[1].set_ylabel("n * |tau - limit|", fontweight="bold")
+    axes[1].set_xlabel("n (Number of Vertices)", fontweight="bold")
+    axes[1].set_title("The error is O(1/n): n * error stays bounded", fontsize=10)
     fig.tight_layout()
     return fig
 
@@ -1210,10 +1232,11 @@ def main():
         "dual"     : st.sidebar.checkbox("3 - Dual-axis k & s",           True),
         "heatmap"  : st.sidebar.checkbox("4 - Heatmap",                   True),
         "s_vs_k"   : st.sidebar.checkbox("5 - s(n) vs k(n)",              True),
-        "isomer"   : st.sidebar.checkbox("6 - Isomer Emergence",          True),
+        "isomer"   : st.sidebar.checkbox("6 - Multiple-Placement labels", True),
         "formula"  : st.sidebar.checkbox("7 - s(n) Formula Analysis",     True),
         "3d"       : st.sidebar.checkbox("8 - Interactive 3D (Plotly)",   True),
         "angle"    : st.sidebar.checkbox("9 - Internal angle vs s(n)",    True),
+        "gap"      : st.sidebar.checkbox("10 - Tension tau(n)",          True),
     }
 
     # -----------------------------------------------------------------------
@@ -1245,7 +1268,7 @@ def main():
         col1.metric("Total rows",        eda["n_rows"])
         col2.metric("n min -> max",     f"{eda['n_range'][0]} -> {eda['n_range'][1]}")
         col3.metric("Hexagonal Res. pts",len(eda["hr_ns"]))
-        col4.metric("First isomer at n", str(eda["first_mp"]) if eda["first_mp"] else "None")
+        col4.metric("First MP label at n", str(eda["first_mp"]) if eda["first_mp"] else "None")
 
         col5, col6, col7, col8 = st.columns(4)
         col5.metric("k=6 share",  f"{eda['pct_k6']}%")
@@ -1321,7 +1344,7 @@ The following steps are applied automatically when the primary sheet is loaded:
 | 9 | Boolean flags | `is_hex_resonance`, `is_max_tense`, `is_multiple_placements`, `is_phase_shift`, `is_minimally_tense`, `uses_skipping` |
 | 10 | Formula cols | `s_exact`, `k_exact` (closed forms) and the superseded `s_simple` computed for every row; disagreements are flagged in the EDA tab |
 | 11 | Sort | Rows sorted ascending by `n` |
-| 12 | Assessed flag | Rows whose tension state is `Not assessed` (n > 55 except 174) are excluded from tension / isomer statistics |
+| 12 | Assessed flag | Rows whose tension state is `Not assessed` (n > 55 except 174) are excluded from tension / label statistics |
 """)
         st.divider()
         st.markdown("#### After-cleaning preview (first 20 rows)")
@@ -1369,26 +1392,40 @@ H3-Original - Maximally Tense = Instability Threshold (REFINED -> H4 Current)
 MT states trigger transitions to higher s(n) to keep k <= 5.
 
 Refined: MT states are conditions enabling k = 6, not signs of instability.
+
+---
+H4-Previous - Tense Perfectibility (REPLACED -> H4 Current)
+All assessed k(n)=6 points for 12 < n <= 55 are labelled Maximally Tense.
+
+The labels are hand-assigned and not a function of k (n = 13 has k = 4 and is labelled; n = 6, 12 and 174 have k = 6 and are not). Replaced by the measurable tension, for which the statement is a theorem.
+
+---
+H6-Previous - Snap-to-Perfection (REPLACED -> H6 Current)
+At n >= 34, multiple placements create flexibility; HR collapses isomers to one perfect configuration.
+
+The n >= 34 threshold and the count 2 came from the labelling. Counted exactly there are 3 tight chains with BA fixed, and multiple placements exist from n = 7.
 """)
         with st.expander("CURRENT Hypotheses (H1-H6)", expanded=True):
             st.success("""
-H1 - Hexagonal Resonance Law (Empirically validated)
-k(n) = 6 iff 6 divides n. Follows from k(n) = floor(n/ceil(n/6)); checked by exact polygon intersection for every n in 3..400.
+Formal statements and proofs: Polygon_Conjoinability_Proofs.pdf (theorem numbers below refer to it).
 
-H2 - Vertex Skipping Optimisation (Empirically supported)
-s(n) = max(0, ceil(n/6) - 2): the smallest non-overlapping neighbour spacing is ceil(n/6) edges. s(6m) = m-2 for every m >= 3 - no regime change.
+H1 - Hexagonal Resonance of the Conjoinability (Proved: Thm 3.2, Thm 4.1, Prop 4.3)
+The conjoinability k(n), the largest number of non-overlapping reflected copies of the n-gon that can be conjoined to it, equals floor(n / ceil(n/6)) for every n >= 3. Hence k(n) = 6 iff 6 divides n (n >= 6).
 
-H3 - Generating Function Isomorphism (Theoretical)
-A generating function P(x,y) models the periodic re-entry into k=6 states.
+H2 - Vertex Skipping and Slack (Proved: Thm 3.2, Thm 4.1, Thm 4.2, Cor 4.4)
+Neighbours on edges at cyclic distance d overlap iff d < n/6. So s(n) = max(0, ceil(n/6) - 2), non-decreasing. The slack sigma(n) = n - k(n) ceil(n/6) equals floor(n/6) + (n mod 6) - 5 for n >= 20 with 6 not dividing n; it is 0 iff 6 divides n or n is 8, 10, 15, 20, 25.
 
-H4 - Tense Perfectibility (Empirically validated)
-All assessed k(n)=6 points for 12 < n <= 55 occur at Maximally Tense states; n=174 is labelled only "Hexagonal Resonance"; other n > 55 are not yet assessed.
+H3 - Generating Function (Proved: Thm 6.1, Cor 6.2)
+The placement polynomial P(n)(x) = sum over t of N(n,t) x^t, with N(n,t) = (n/t) C(n - t(m-1) - 1, t - 1) and m = ceil(n/6), equals the sum of the n-th powers of the roots of lambda^m = lambda^(m-1) + x. Its degree is 6 exactly when 6 divides n (the re-entry into k = 6).
 
-H5 - Discrete-to-Continuous Resonance (Theoretical)
-k(n) oscillations form a "geometric wave function" echoing the circle's k=6.
+H4 - Tension (Formalised: Thm 7.1 (ii))
+The tension tau(n) is the clearance, in sides, between two neighbours conjoined at the minimal spacing. For n >= 7, tau(n) = 0 iff 6 divides n iff k(n) = 6. The hand-assigned Maximally Tense labels are not a function of k and are not used as evidence.
 
-H6 - Probabilistic Perfectibility / Snap-to-Perfection (Empirically supported)
-At n >= 34, multiple placements create flexibility; HR collapses isomers to one perfect configuration.
+H5 - Discrete-to-Continuous Resonance (Formalised: Thm 7.1 (iii), Prop 7.2)
+For n >= 7 with 6 not dividing n, |tau(n) - (sqrt(3)/6)(6 - r)| <= (kappa^2/2 + 1) pi/n, where r = n mod 6 and kappa = (6 - r)/6: a sawtooth of period 6 with zeros at the resonances (Plot 10). limsup k(n) = 6, the circle's kissing number, and liminf k(n) = 5.
+
+H6 - Flexibility and Rigidity (Proved: Thm 5.1, Thm 5.3, Cor 5.4, Thm 5.5)
+N(n,t) counts the placements of t neighbours. The extremal placement is unique up to rotation iff the slack is at most 1, i.e. iff 6 divides n or n is one of 7, 8, 9, 10, 11, 13, 15, 16, 20, 21, 25, 26, 31. With BA fixed there are ceil(k/2) tight chains when the slack is positive (3 for n = 34). Multiple placements exist at every n with positive slack, from n = 7.
 """)
 
         st.divider()
@@ -1418,6 +1455,12 @@ At n >= 34, multiple placements create flexibility; HR collapses isomers to one 
             ("E8", "k(7) = 4",
              "Four neighbours fit around a heptagon",
              "k(7) = 3: neighbours on adjacent edges overlap (interior angle > 120 deg)"),
+            ("E9", "Multiple Placements (2) at n = 34-55",
+             "Two placements (counted by eye in GeoGebra)",
+             "Three: tight chains with BA fixed 4+0, 3+1, 2+2 (report Thm 5.5); labels corrected to 3"),
+            ("E10", "Multiple placements start at n = 34",
+             "Flexibility appears only from n >= 34",
+             "Tight chains with BA fixed exist at every n with slack, from n = 7; the threshold came from the labelling, not the geometry"),
         ], columns=["ID", "Name", "What Was Believed", "Correction"])
         st.dataframe(errors_df, use_container_width=True, hide_index=True)
 
@@ -1446,7 +1489,7 @@ At n >= 34, multiple placements create flexibility; HR collapses isomers to one 
             mpl_to_st(fig_s_vs_k(df))
 
         if show["isomer"]:
-            st.markdown("#### Plot 6 - Isomer (Multiple Placement) Emergence")
+            st.markdown("#### Plot 6 - Rows labelled Multiple Placements")
             mpl_to_st(fig_isomer_emergence(df))
 
         if show["formula"]:
@@ -1460,6 +1503,13 @@ At n >= 34, multiple placements create flexibility; HR collapses isomers to one 
         if show["angle"]:
             st.markdown("#### Plot 9 - Internal angle vs. vertices skipped (degrees and radians)")
             mpl_to_st(fig_angle_vs_s(df))
+
+        if show["gap"]:
+            st.markdown("#### Plot 10 - Tension tau(n) and its sawtooth limit")
+            if PLACEMENTS_OK:
+                mpl_to_st(fig_contact_gap(df))
+            else:
+                st.info("Needs Polygon_placements.py (and shapely) next to this script.")
 
     # -- TAB: SUPPLEMENTARY SHEETS ------------------------------------------
     with tab_supp:

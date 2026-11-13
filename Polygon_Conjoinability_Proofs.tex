@@ -1,0 +1,759 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools,booktabs,graphicx,enumitem,array}
+\usepackage[hidelinks]{hyperref}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+\DeclareMathOperator{\dist}{dist}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\inter}{\operatorname{int}}
+\newcommand{\ip}[2]{\langle #1,#2\rangle}
+\newcommand{\Rf}{\mathcal{R}}
+
+\title{Polygon conjoinability: definitions, proofs, and a formal version\\of the tension and resonance hypotheses}
+\author{Muhammad Zaid Bilal}
+\date{November 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Take a regular $n$-gon $P$ and conjoin to it copies of itself, each copy being the reflection of $P$ across one of its edges, so that no two copies overlap.
+The \emph{conjoinability} $k(n)$ of the $n$-gon is the largest number of copies that can be conjoined in this way.
+We prove that $k(n)=\lfloor n/\lceil n/6\rceil\rfloor$ and compute its values explicitly, together with the \emph{slack} $\sigma(n)=n-k(n)\lceil n/6\rceil$ and the number
+$s(n)=\max(0,\lceil n/6\rceil-2)$ of central vertices left untouched between two adjacent copies at the tightest packing. In particular the conjoinability equals $6$ exactly when $6\mid n$.
+The proof reduces overlap of two copies to the membership of their centre offset in a difference body, which gives the exact threshold $\lceil n/6\rceil$.
+We then count all valid placements (exactly, up to rotation, and up to rotation and reflection), characterise the $n$ for which the extremal placement is unique,
+identify the placement polynomial with a power sum of the roots of $\lambda^m=\lambda^{m-1}+x$, define the \emph{tension} $\tau(n)$ of the tightest packing,
+prove that it vanishes exactly at the hexagonal resonances, and bound its distance from an explicit sawtooth profile for large $n$ by an explicit inequality.
+All statements are cross-checked against an exact-geometry program (Section~\ref{sec:verif}).
+\end{abstract}
+
+\tableofcontents
+
+%--------------------------------------------------------------------------------------------------
+\section{Setting and definitions}\label{sec:setting}
+
+\subsection{The polygon and its edges}
+Fix an integer $n\ge3$ and put $u:=\pi/n$. Let $P$ be the regular $n$-gon with centre at the origin $O$ and circumradius $1$ (the scale plays no role).
+Its vertices are $v_j=(\cos 2ju,\ \sin 2ju)$ for $j\in\Z_n$. Edge $e\in\Z_n$ is the segment from $v_e$ to $v_{e+1}$. Its midpoint $\tfrac12(v_e+v_{e+1})$ lies at angle $\psi_e:=(2e+1)u$ and at distance
+\[
+a:=\cos u\qquad(\text{the apothem})
+\]
+from $O$, and the side length is
+\[
+\ell:=|v_{e+1}-v_e|=2\sin u .
+\]
+The outward unit normal of edge $e$ is $u_e:=(\cos\psi_e,\sin\psi_e)$ (not to be confused with the number $u=\pi/n$; we always write the normal with its index). The line carrying edge $e$ is
+$L_e:=\{x\in\R^2:\ \ip{x}{u_e}=a\}$, and $P\subseteq\{x:\ip{x}{u_e}\le a\}$.
+
+\subsection{Neighbours, placements, conjoinability}
+
+\begin{definition}[Neighbour]\label{def:neighbour}
+Let $\Rf_e$ be the reflection in the line $L_e$, that is
+\[
+\Rf_e(x)=x-2\big(\ip{x}{u_e}-a\big)\,u_e .
+\]
+The \emph{neighbour on edge $e$} is $N_e:=\Rf_e(P)$. We say that $N_e$ is \emph{conjoined} to $P$ along edge $e$.
+\end{definition}
+
+Since $\ip{x}{u_e}-a\le0$ for $x\in P$ and $\Rf_e$ changes the sign of $\ip{x}{u_e}-a$, we have $N_e\subseteq\{x:\ip{x}{u_e}\ge a\}$. So $N_e$ lies on the other side of $L_e$ and its interior is disjoint from $P$; the polygons $P$ and $N_e$ share exactly the edge $e$.
+
+\begin{definition}[Placement]\label{def:placement}
+A set $S\subseteq\Z_n$ of edges is a \emph{placement} if $\inter N_e\cap\inter N_f=\emptyset$ for all distinct $e,f\in S$. The \emph{size} of $S$ is $|S|$.
+Touching (along a point or a segment) is allowed; overlapping on top of another copy is not.
+\end{definition}
+
+\begin{definition}[Conjoinability]\label{def:conj}
+The \emph{conjoinability} of the regular $n$-gon is
+\[
+k(n):=\max\{\,|S|:\ S\subseteq\Z_n\text{ is a placement}\,\},
+\]
+the largest number of copies of $P$ that can be conjoined to $P$ along full edges by reflection without overlap.
+A placement of size $k(n)$ is called \emph{extremal}.
+\end{definition}
+
+\subsection{Spacing, vertex skipping, slack and tension}
+
+The \emph{cyclic distance} of two distinct edges is $d(e,f)=\min\big(|e-f|,\,n-|e-f|\big)\in\{1,\dots,\lfloor n/2\rfloor\}$, where $|e-f|$ is computed from representatives in $\{0,\dots,n-1\}$.
+The rotation of the plane by $2\pi/n$ maps $P$ to itself, $v_j$ to $v_{j+1}$ and $N_e$ to $N_{e+1}$. Hence whether $N_e$ and $N_f$ overlap depends only on $d(e,f)$.
+
+\begin{definition}[Minimal spacing]\label{def:spacing}
+A distance $d\ge1$ is \emph{admissible} if $\inter N_e\cap\inter N_f=\emptyset$ whenever $d(e,f)=d$. The \emph{minimal spacing} $m(n)$ is the smallest admissible distance.
+(It exists, and equals $\lceil n/6\rceil$, by Theorem~\ref{thm:spacing} and Proposition~\ref{prop:small}.)
+\end{definition}
+
+For a placement $S=\{e_1<e_2<\dots<e_t\}$ with $t\ge2$ the \emph{gaps} are $g_i=e_{i+1}-e_i$ for $1\le i<t$ and $g_t=n-e_t+e_1$; they satisfy $g_1+\dots+g_t=n$.
+
+\begin{definition}[Vertex skipping and slack]\label{def:skip}
+Two neighbours on the edges $e$ and $e+m$, $m=m(n)$, leave the central vertices $v_{e+2},\dots,v_{e+m-1}$ untouched, which are $m-2$ vertices when $m\ge2$.
+The \emph{vertex skipping} is $s(n):=\max(0,\,m(n)-2)$ (for $m=1$ the neighbours share the vertex $v_{e+1}$ and nothing is skipped).
+The \emph{slack} is $\sigma(n):=n-k(n)\,m(n)$, the number of edges of $P$ left over when $k(n)$ neighbours are packed at the minimal spacing.
+\end{definition}
+
+\begin{definition}[Tension]\label{def:tension}
+Let $e,f$ be edges with $d(e,f)=m(n)$. The \emph{tension} of the $n$-gon is the clearance between the two neighbours, measured in sides of the polygon:
+\[
+\tau(n):=\frac{\dist(N_e,N_f)}{\ell},\qquad \ell=2\sin\tfrac\pi n .
+\]
+By the rotation symmetry above it does not depend on the choice of $e,f$. Always $\tau(n)\ge0$. We call the packing \emph{maximally tense} if $\tau(n)=0$, i.e.\ if the neighbours press against each other,
+and \emph{loose} if $\tau(n)>0$. Tension is a geometric quantity (a length); the slack $\sigma(n)$ is its combinatorial counterpart (a number of edges).
+\end{definition}
+
+\begin{table}[ht]
+\centering\small
+\begin{tabular}{@{}p{2.4cm}p{12.6cm}@{}}
+\toprule
+Symbol & Meaning\\
+\midrule
+$u=\pi/n$ & half the central angle subtended by one edge\\
+$a=\cos u$ & apothem of $P$ (distance from $O$ to an edge)\\
+$\ell=2\sin u$ & side length of $P$\\
+$u_e,\ \psi_e,\ L_e,\ \Rf_e$ & outward unit normal of edge $e$, its angle $(2e+1)u$, the line carrying the edge, the reflection in that line\\
+$N_e=\Rf_e(P)$ & neighbour on edge $e$\\
+$d(e,f)$ & cyclic distance of two edges\\
+$m(n)$ & minimal admissible spacing ($=\lceil n/6\rceil$)\\
+$k(n)$ & conjoinability: largest number of non-overlapping neighbours\\
+$\sigma(n)$, $s(n)$ & slack $n-k\,m$; vertex skipping $\max(0,m-2)$\\
+$\tau(n)$ & tension: clearance of the tightest packing in sides\\
+$D=P-P$ & difference body $\{p-q:\ p,q\in P\}$\\
+$h_D,\ r_D,\ R_D$ & support function, inradius and circumradius of $D$\\
+$c_{ef}=2a(u_f-u_e)$ & offset between the centres of $N_e$ and $N_f$\\
+$q,\ r,\ \kappa$ & $n=6q+r$ with $q=\lfloor n/6\rfloor$, $r=n\bmod6$; $\kappa=(6-r)/6$\\
+$N(n,t)$, $P_n(x)$ & number of placements of size $t$; placement polynomial\\
+\bottomrule
+\end{tabular}
+\caption{Notation.}
+\end{table}
+
+%--------------------------------------------------------------------------------------------------
+\section{The geometry of neighbours}\label{sec:geometry}
+
+\begin{lemma}[Neighbours are translates of $-P$]\label{lem:translate}
+$N_e=2a\,u_e+(-P)$ for every edge $e$.
+\end{lemma}
+\begin{proof}
+From Definition~\ref{def:neighbour}, $\Rf_e(x)=\big(x-2\ip{x}{u_e}u_e\big)+2a\,u_e$. Put $T_e(x):=x-2\ip{x}{u_e}u_e$, the reflection in the line through $O$ perpendicular to $u_e$,
+and $M_e(x):=2\ip{x}{u_e}u_e-x$, the reflection in the line $Ou_e$. Then $T_e(x)=-M_e(x)$ (expand: $-M_e(x)=x-2\ip{x}{u_e}u_e$).
+The line $Ou_e$ passes through the centre of $P$ and the midpoint of edge $e$, which is a symmetry axis of the regular polygon, so $M_e(P)=P$. Therefore
+\[
+N_e=\Rf_e(P)=2a\,u_e+T_e(P)=2a\,u_e-M_e(P)=2a\,u_e-P. \qedhere
+\]
+\end{proof}
+
+\begin{lemma}[Translates of a convex body]\label{lem:diffbody}
+Let $K\subset\R^2$ be a convex body (compact, convex, non-empty interior) and $x,y\in\R^2$. Then
+\begin{enumerate}[label=(\alph*),nosep]
+\item $(x+K)\cap(y+K)\neq\emptyset\iff y-x\in K-K$;
+\item $\inter(x+K)\cap\inter(y+K)\neq\emptyset\iff y-x\in\inter(K-K)$;
+\item $\dist(x+K,\,y+K)=\dist(y-x,\,K-K)$,
+\end{enumerate}
+where $K-K=\{p-q:\ p,q\in K\}$.
+\end{lemma}
+\begin{proof}
+(a) If $z\in(x+K)\cap(y+K)$ then $z-x\in K$ and $z-y\in K$, so $y-x=(z-x)-(z-y)\in K-K$. Conversely, if $y-x=p-q$ with $p,q\in K$, then $z:=x+p=y+q$ lies in both sets.
+
+(b) For convex sets $C_1,C_2$ the relative interiors satisfy $\operatorname{ri}(C_1+C_2)=\operatorname{ri}C_1+\operatorname{ri}C_2$ (Rockafellar, \emph{Convex Analysis}, Cor.~6.6.2). With $C_1=K$, $C_2=-K$ this gives $\inter(K-K)=\inter K-\inter K$.
+If $z\in\inter(x+K)\cap\inter(y+K)$, then $z-x,\,z-y\in\inter K$ and $y-x=(z-x)-(z-y)\in\inter K-\inter K=\inter(K-K)$.
+Conversely, if $y-x=p-q$ with $p,q\in\inter K$, then $z:=x+p=y+q$ lies in both interiors.
+
+(c) $\dist(x+K,y+K)=\inf_{p,q\in K}\big|(x+p)-(y+q)\big|=\inf_{p,q\in K}\big|(x-y)+(p-q)\big|=\dist(x-y,\,-(K-K))=\dist(y-x,\,K-K)$, because $K-K$ is symmetric about the origin.
+\end{proof}
+
+Put
+\[
+D:=P-P=P+(-P),
+\]
+a centrally symmetric convex body with $0$ in its interior. For two edges $e,f$ with $d(e,f)=d$ put $c_{ef}:=2a(u_f-u_e)$.
+
+\paragraph{The length of $c_{ef}$.} Since $|u_f-u_e|^2=2-2\cos(\psi_f-\psi_e)=4\sin^2\tfrac{\psi_f-\psi_e}{2}$ and $\psi_f-\psi_e=2u(f-e)$, we get $|u_f-u_e|=2\,|\sin(u(f-e))|=2\sin(ud)$ (the values for $f-e$ and $n-(f-e)$ agree because $\sin(\pi-\theta)=\sin\theta$). Hence
+\begin{equation}\label{eq:chord}
+|c_{ef}|=4a\sin(ud)=4\cos u\,\sin\tfrac{\pi d}{n}.
+\end{equation}
+
+\begin{corollary}[Overlap criterion]\label{cor:criterion}
+$\inter N_e\cap\inter N_f\ne\emptyset\iff c_{ef}\in\inter D$, \quad and \quad $\dist(N_e,N_f)=\dist(c_{ef},D)$.
+\end{corollary}
+\begin{proof}
+By Lemma~\ref{lem:translate}, $N_e=O_e+K$ with $K=-P$ and $O_e=2a\,u_e$, and $K-K=(-P)-(-P)=-P+P=D$. Apply Lemma~\ref{lem:diffbody} with $x=O_e$, $y=O_f$, so $y-x=O_f-O_e=c_{ef}$.
+\end{proof}
+
+\begin{lemma}[Shape of $D$]\label{lem:D}
+Let $h_D(\theta)=\max_{x\in D}\ip{x}{(\cos\theta,\sin\theta)}$ be the support function of $D$, and put $r_D:=\min_\theta h_D(\theta)$, $R_D:=\max_\theta h_D(\theta)$. Then
+$\{|x|\le r_D\}\subseteq D\subseteq\{|x|\le R_D\}$, and
+\[
+\begin{array}{lll}
+n\ \text{even}: & r_D=2a=2\cos u, & R_D=2,\\[3pt]
+n\ \text{odd}: & r_D=1+a=1+\cos u=2\cos^2\tfrac u2, & R_D=2\cos\tfrac u2 .
+\end{array}
+\]
+\end{lemma}
+\begin{proof}
+Write $w_\theta=(\cos\theta,\sin\theta)$. A convex body is the intersection of its supporting half planes, $D=\bigcap_\theta\{x:\ip{x}{w_\theta}\le h_D(\theta)\}$; every half plane contains the disc of radius $r_D$, so that disc lies in $D$.
+For $x\in D$, $x\ne0$, we have $|x|=\ip{x}{x/|x|}\le h_D(x/|x|)\le R_D$.
+
+\emph{Support function of $P$.} $h_P(\theta)=\max_j\ip{v_j}{w_\theta}=\max_j\cos(\theta-2ju)=\cos\delta(\theta)$, where $\delta(\theta):=\dist(\theta,2u\Z)\in[0,u]$ is the angular distance to the nearest vertex direction (cosine is decreasing on $[0,\pi]$).
+Since $D=P+(-P)$ and $h_{-P}(\theta)=h_P(\theta+\pi)$, we get $h_D(\theta)=h_P(\theta)+h_P(\theta+\pi)=\cos\delta(\theta)+\cos\delta(\theta+\pi)$.
+
+\emph{$n$ even.} Then $\pi=\tfrac n2\cdot2u\in2u\Z$, so $\delta(\theta+\pi)=\delta(\theta)$ and $h_D=2\cos\delta$. As $\delta$ ranges over $[0,u]$, the minimum is $2\cos u$ and the maximum is $2$.
+
+\emph{$n$ odd.} Then $\pi=\tfrac{n-1}2\cdot2u+u$, so $\delta(\theta+\pi)=\dist(\theta+u,\,2u\Z)$. If $\theta\equiv+\delta$ modulo $2u$, then $\theta+u\equiv u+\delta\in[u,2u]$ and its distance to $2u\Z$ is $2u-(u+\delta)=u-\delta$.
+If $\theta\equiv-\delta$, then $\theta+u\equiv u-\delta\in[0,u]$, with distance $u-\delta$. So $\delta(\theta+\pi)=u-\delta(\theta)$ in both cases and, by the sum-to-product formula $\cos A+\cos B=2\cos\frac{A+B}2\cos\frac{A-B}2$ with $A=\delta$, $B=u-\delta$,
+\[
+h_D=\cos\delta+\cos(u-\delta)=2\cos\tfrac u2\,\cos\big(\delta-\tfrac u2\big),\qquad |\delta-\tfrac u2|\le\tfrac u2 .
+\]
+The maximum is $2\cos\frac u2$ (at $\delta=\frac u2$) and the minimum is $2\cos\frac u2\cos\frac u2=2\cos^2\frac u2=1+\cos u$ (at $\delta\in\{0,u\}$).
+\end{proof}
+
+%--------------------------------------------------------------------------------------------------
+\section{The spacing theorem}\label{sec:spacing}
+
+\begin{lemma}[Two trigonometric inequalities]\label{lem:trig}
+Let $S(u)=\sin\!\big(\tfrac\pi6+\tfrac{7u}{6}\big)+\sin\!\big(\tfrac\pi6-\tfrac{5u}{6}\big)$. Then
+\begin{enumerate}[label=(\roman*),nosep]
+\item $S(u)>1$ for $0<u\le\pi/8$;
+\item $S(u)>\cos\tfrac u2$ for $0<u\le\pi/7$.
+\end{enumerate}
+\end{lemma}
+\begin{proof}
+Differentiating twice (each argument has derivative $\frac76$ resp.\ $-\frac56$),
+\[
+S''(u)=-\tfrac{49}{36}\sin\!\big(\tfrac\pi6+\tfrac{7u}6\big)-\tfrac{25}{36}\sin\!\big(\tfrac\pi6-\tfrac{5u}6\big).
+\]
+For $0\le u\le\pi/7$ the first argument lies in $[\tfrac\pi6,\tfrac\pi3]$, so its sine is $\ge\frac12$; the second lies in $[\tfrac\pi{21},\tfrac\pi6]$, so its sine is positive. Hence $S''\le-\tfrac{49}{72}<0$ and $S$ is strictly concave on $[0,\pi/7]$.
+
+(i) $S(0)=2\sin\frac\pi6=1$. At $u=\pi/8$ the arguments are $\tfrac\pi6+\tfrac{7\pi}{48}=\tfrac{5\pi}{16}$ and $\tfrac\pi6-\tfrac{5\pi}{48}=\tfrac{\pi}{16}$, so $S(\pi/8)=\sin\tfrac{5\pi}{16}+\sin\tfrac\pi{16}=0.8315\ldots+0.1951\ldots=1.0266\ldots>1$.
+A strictly concave function lies strictly above its chord, so $S>1$ on $(0,\pi/8]$.
+
+(ii) Put $T(u)=S(u)-\cos\tfrac u2$. Then $T''=S''+\tfrac14\cos\tfrac u2\le-\tfrac{49}{72}+\tfrac14=-0.4306\ldots<0$, so $T$ is strictly concave on $[0,\pi/7]$. $T(0)=1-1=0$. At $u=\pi/7$ the arguments are $\tfrac\pi6+\tfrac{7\pi}{42}=\tfrac\pi3$ and $\tfrac\pi6-\tfrac{5\pi}{42}=\tfrac\pi{21}$, so
+$T(\pi/7)=\sin\tfrac\pi3+\sin\tfrac\pi{21}-\cos\tfrac\pi{14}=0.8660\ldots+0.1490\ldots-0.9749\ldots=0.0401\ldots>0$. Hence $T>0$ on $(0,\pi/7]$.
+\end{proof}
+
+\begin{theorem}[Spacing]\label{thm:spacing}
+Let $n\ge7$ and let $e,f$ be edges with cyclic distance $d=d(e,f)$. Then
+\begin{enumerate}[label=(\alph*),nosep]
+\item if $d<n/6$, the interiors of $N_e$ and $N_f$ overlap;
+\item if $d>n/6$, they do not overlap, and in fact $\dist(N_e,N_f)>0$;
+\item if $d=n/6$ (so $6\mid n$), they do not overlap but touch.
+\end{enumerate}
+Consequently $d$ is admissible if and only if $d\ge\lceil n/6\rceil$, i.e.\ $m(n)=\lceil n/6\rceil$.
+\end{theorem}
+
+\begin{proof}
+Write $c=c_{ef}$. By Corollary~\ref{cor:criterion} we must decide whether $c\in\inter D$, using \eqref{eq:chord} and the bounds $\{|x|\le r_D\}\subseteq D\subseteq\{|x|\le R_D\}$ of Lemma~\ref{lem:D}.
+
+\emph{(a)} Let $d<n/6$. Then $0<ud<\pi/6<\pi/2$ and $\sin$ is increasing there, so $|c|=4a\sin(ud)<4a\sin\tfrac\pi6=2a$.
+Now $r_D=2a$ for even $n$ and $r_D=1+a\ge2a$ for odd $n$ (because $a\le1$). So $|c|<r_D$, hence $c$ lies in the open disc of radius $r_D$, which is contained in $\inter D$.
+
+\emph{(b)} Let $d_0$ be the smallest integer with $d_0>n/6$, and write $d_0=\tfrac n6+\eta_0$.
+If $n=6q+r$ with $1\le r\le5$, then $d_0=q+1$ and $\eta_0=(q+1)-\tfrac{6q+r}6=\tfrac{6-r}6\in[\tfrac16,\tfrac56]$. If $6\mid n$, then $d_0=\tfrac n6+1$ and $\eta_0=1$. In all cases $\tfrac16\le\eta_0\le1$.
+For every $d$ with $d_0\le d\le n/2$ we have $\tfrac{\pi d}n\le\tfrac\pi2$, and since $\sin$ is increasing on $[0,\tfrac\pi2]$,
+\[
+|c|=4a\sin\tfrac{\pi d}n\ \ge\ 4a\sin\big(\tfrac\pi6+\eta_0u\big)\ \ge\ 4a\sin A_0,\qquad A_0:=\tfrac\pi6+\tfrac u6,
+\]
+where we used $\tfrac{\pi d_0}{n}=\tfrac\pi6+\eta_0u$ and $\eta_0\ge\tfrac16$ (the argument stays below $\frac\pi6+u\le\frac\pi6+\frac\pi7<\frac\pi2$).
+The product-to-sum identity $2\cos u\sin A=\sin(A+u)+\sin(A-u)$ (add $\sin(A\pm u)=\sin A\cos u\pm\cos A\sin u$) with $A=A_0$ gives, since $A_0+u=\tfrac\pi6+\tfrac{7u}6$ and $A_0-u=\tfrac\pi6-\tfrac{5u}6$,
+\[
+4a\sin A_0=2\cdot2\cos u\sin A_0=2\,S(u),\qquad S(u)=\sin\!\big(\tfrac\pi6+\tfrac{7u}6\big)+\sin\!\big(\tfrac\pi6-\tfrac{5u}6\big).
+\]
+\begin{itemize}[nosep]
+\item $n$ even (so $n\ge8$ and $u\le\pi/8$): $|c|\ge2S(u)>2=R_D$ by Lemma~\ref{lem:trig}(i).
+\item $n$ odd (so $u\le\pi/7$): $|c|\ge2S(u)>2\cos\tfrac u2=R_D$ by Lemma~\ref{lem:trig}(ii).
+\end{itemize}
+In both cases $|c|>R_D$, so $c\notin D$ (because $D\subseteq\{|x|\le R_D\}$). Thus the interiors are disjoint and $\dist(N_e,N_f)=\dist(c,D)>0$ since $D$ is closed.
+
+\emph{(c)} Let $n=6q$ and $d=q$; by rotation take $e=0$, $f=q$. For angles $\alpha,\beta$ the difference formulas $\cos\beta-\cos\alpha=-2\sin\frac{\alpha+\beta}2\sin\frac{\beta-\alpha}2$ and $\sin\beta-\sin\alpha=2\cos\frac{\alpha+\beta}2\sin\frac{\beta-\alpha}2$ give
+\[
+(\cos\beta-\cos\alpha,\ \sin\beta-\sin\alpha)=2\sin\tfrac{\beta-\alpha}2\,(\cos\gamma,\ \sin\gamma),\qquad\gamma=\tfrac{\alpha+\beta}2+\tfrac\pi2 .
+\]
+Take $\alpha=\psi_0=u$ and $\beta=\psi_q=(2q+1)u$. Then $\tfrac{\beta-\alpha}2=qu=\tfrac\pi6$, so $2\sin\frac{\beta-\alpha}2=1$; and since $\tfrac\pi2=\tfrac n2u=3qu$, $\gamma=(q+1)u+3qu=(4q+1)u=\psi_{2q}$.
+Hence $u_q-u_0=(\cos\psi_{2q},\sin\psi_{2q})=u_{2q}$ and
+\[
+c=2a\,u_{2q}.
+\]
+Because $n$ is even, $-P=P$ and $D=2P$, whose support function in the direction $\psi_{2q}$ is $2h_P(\psi_{2q})=2a$ (the direction $\psi_{2q}$ is an edge normal, midway between vertex directions, so $\delta=u$ and $h_P=\cos u=a$).
+So $\ip{c}{u_{2q}}=2a=h_D(\psi_{2q})$: the point $c$ lies on a supporting line of $D$, hence $c\notin\inter D$, and it is the midpoint of the corresponding edge of $2P$, hence $c\in D$. The interiors are disjoint and the neighbours touch.
+
+Finally, (a)--(c) say that $d$ is admissible iff $d\ge n/6$, i.e.\ (for integers) iff $d\ge\lceil n/6\rceil$.
+\end{proof}
+
+\begin{proposition}[Contact when $6\mid n$: a shared edge]\label{prop:shared}
+Let $n=6q$. The neighbours $N_0$ and $N_q$ intersect in a full edge of length $\ell$ (the ``perfect ring'' contact of the GeoGebra drawing of the $36$-gon).
+\end{proposition}
+\begin{proof}
+$n$ is even, so $-P=P$ and $N_e=O_e+P$ with $O_e=2a\,u_e$. By part (c) above, $N_0\cap N_q=O_0+\big(P\cap(P+c)\big)$ with $c=2a\,w$, $w:=u_{2q}$.
+$P\subseteq\{\ip{x}{w}\le a\}$ and, by central symmetry, $P\subseteq\{\ip{x}{w}\ge-a\}$, so $P+c\subseteq\{\ip{x}{w}\ge a\}$. The intersection therefore lies on the line $\ip{x}{w}=a$.
+Let $F=P\cap\{\ip{x}{w}=a\}=\{aw+t\omega:\ |t|\le\ell/2\}$ be the edge of $P$ with normal $w$ ($\omega\perp w$ a unit vector). By symmetry $P\cap\{\ip{x}{w}=-a\}=-F$, so
+$(P+c)\cap\{\ip{x}{w}=a\}=c-F=\{2aw-aw-t\omega\}=\{aw+t'\omega:\ |t'|\le\ell/2\}=F$. Thus $P\cap(P+c)=F$, an edge of length $\ell$.
+\end{proof}
+
+\begin{proposition}[Small polygons]\label{prop:small}
+For $3\le n\le6$ no two neighbours overlap, so $m(n)=1$.
+\end{proposition}
+\begin{proof}
+Compare $|c_d|=4a\sin\frac{\pi d}n$ with $R_D$ (Lemma~\ref{lem:D}); $|c|\ge R_D$ implies $c\notin\inter D$.
+\begin{itemize}[nosep]
+\item $n=3$ ($R_D=2\cos\frac\pi6=\sqrt3$): $d=1$: $|c|=4\cdot\tfrac12\cdot\tfrac{\sqrt3}2=\sqrt3=R_D$.
+\item $n=4$ ($R_D=2$): $d=1$: $|c|=4\cdot\tfrac{\sqrt2}2\cdot\tfrac{\sqrt2}2=2=R_D$; $d=2$: $|c|=4\cdot\tfrac{\sqrt2}2=2\sqrt2>R_D$.
+\item $n=5$ ($R_D=2\cos18^\circ=1.9021\ldots$): $d=1$: $|c|=4\cos36^\circ\sin36^\circ=2\sin72^\circ=1.9021\ldots=R_D$; $d=2$: $|c|=4\cos36^\circ\sin72^\circ=3.0777\ldots>R_D$.
+\item $n=6$ ($R_D=2$): $d=1$: the touching case~(c) of Theorem~\ref{thm:spacing}, whose proof uses only $n=6q$, so it applies with $q=1$; $d=2$: $|c|=4\cdot\tfrac{\sqrt3}2\cdot\tfrac{\sqrt3}2=3>R_D$; $d=3$: $|c|=4\cdot\tfrac{\sqrt3}2=2\sqrt3>R_D$.
+\end{itemize}
+In every case $c\notin\inter D$.
+\end{proof}
+
+\begin{corollary}[Characterisation of placements]\label{cor:placements}
+For every $n\ge3$ and $S\subseteq\Z_n$: $S$ is a placement $\iff$ any two distinct elements of $S$ have cyclic distance $\ge m(n)$ $\iff$ (when $|S|\ge2$) all gaps of $S$ are $\ge m(n)$.
+\end{corollary}
+\begin{proof}
+The first equivalence is Theorem~\ref{thm:spacing} together with Proposition~\ref{prop:small} (for $n\le6$, $m=1$ and every distance is admissible).
+Suppose all pairwise cyclic distances are $\ge m$. A gap $g_i$ is the length of one of the two arcs between two consecutive elements, and the cyclic distance of these elements is $\min(g_i,n-g_i)\ge m$, so $g_i\ge m$.
+Conversely, suppose all gaps are $\ge m$. Two distinct elements of $S$ are separated, along each of the two arcs joining them, by at least one gap, so both arcs have length $\ge m$ and the cyclic distance is $\ge m$.
+\end{proof}
+
+%--------------------------------------------------------------------------------------------------
+\section{Conjoinability, slack and vertex skipping: formulas and values}\label{sec:values}
+
+\begin{theorem}[Formulas]\label{thm:ks}
+For every $n\ge3$,
+\[
+\begin{aligned}
+m(n)&=\Big\lceil\frac n6\Big\rceil, & k(n)&=\Big\lfloor\frac n{m(n)}\Big\rfloor,\\
+s(n)&=\max\big(0,\ m(n)-2\big), & \sigma(n)&=n-k(n)\,m(n)=n\bmod m(n)\in\{0,\dots,m(n)-1\}.
+\end{aligned}
+\]
+\end{theorem}
+\begin{proof}
+For $n\ge7$, $m(n)=\lceil n/6\rceil$ is Theorem~\ref{thm:spacing}. For $3\le n\le6$, Proposition~\ref{prop:small} gives $m(n)=1=\lceil n/6\rceil$.
+By Corollary~\ref{cor:placements}, a placement of size $t\ge2$ is a choice of $t$ gaps $g_1,\dots,g_t\ge m$ with $g_1+\dots+g_t=n$ (the edges are recovered as partial sums), and such gaps exist if and only if $tm\le n$.
+A placement of size $1$ always exists. Hence the largest size is $\lfloor n/m\rfloor$ (note $n/m\ge3>1$). The formula for $s$ is Definition~\ref{def:skip}.
+Finally $\sigma=n-\lfloor n/m\rfloor m$ is the remainder of $n$ on division by $m$, so $0\le\sigma\le m-1$.
+\end{proof}
+
+\begin{theorem}[Values of $k$, $\sigma$ and $s$]\label{thm:values}
+Write $n=6q+r$ with $q=\lfloor n/6\rfloor$ and $r=n\bmod6\in\{0,1,\dots,5\}$.
+\begin{enumerate}[label=(\alph*)]
+\item \emph{$3\le n\le6$.} $m=1$, $k(n)=n$, $\sigma=0$, $s=0$.
+\item \emph{$6\mid n$ ($r=0$, $q\ge1$).} $m=q$, $k(n)=6$, $\sigma=0$, $s=\max(0,q-2)$.
+\item \emph{$n\ge7$, $6\nmid n$ ($1\le r\le5$, $q\ge1$).} $m=q+1$, $s=q-1$, and
+\[
+k(n)=6-\Big\lceil\frac{6-r}{q+1}\Big\rceil .
+\]
+In particular $k(n)=5$ and $\sigma(n)=q+r-5=\lfloor n/6\rfloor+(n\bmod6)-5$ for every such $n$ \emph{except} the six values
+\[
+\begin{array}{c|cccccc}
+n & 7 & 8 & 9 & 13 & 14 & 19\\\hline
+k(n) & 3 & 4 & 4 & 4 & 4 & 4\\
+\sigma(n) & 1 & 0 & 1 & 1 & 2 & 3
+\end{array}
+\]
+\end{enumerate}
+Table~\ref{tab:values} lists the values for $3\le n\le38$.
+\end{theorem}
+
+\begin{table}[ht]
+\centering\small
+\setlength{\tabcolsep}{4.5pt}
+\begin{tabular}{rrrrr@{\hspace{1.2em}}rrrrr@{\hspace{1.2em}}rrrrr}
+\toprule
+$n$ & $m$ & $k$ & $\sigma$ & $s$ & $n$ & $m$ & $k$ & $\sigma$ & $s$ & $n$ & $m$ & $k$ & $\sigma$ & $s$\\
+\midrule
+$3$ & $1$ & $3$ & $0$ & $0$ & $15$ & $3$ & $5$ & $0$ & $1$ & $27$ & $5$ & $5$ & $2$ & $3$ \\
+$4$ & $1$ & $4$ & $0$ & $0$ & $16$ & $3$ & $5$ & $1$ & $1$ & $28$ & $5$ & $5$ & $3$ & $3$ \\
+$5$ & $1$ & $5$ & $0$ & $0$ & $17$ & $3$ & $5$ & $2$ & $1$ & $29$ & $5$ & $5$ & $4$ & $3$ \\
+$\mathbf{6}$ & $\mathbf{1}$ & $\mathbf{6}$ & $\mathbf{0}$ & $\mathbf{0}$ & $\mathbf{18}$ & $\mathbf{3}$ & $\mathbf{6}$ & $\mathbf{0}$ & $\mathbf{1}$ & $\mathbf{30}$ & $\mathbf{5}$ & $\mathbf{6}$ & $\mathbf{0}$ & $\mathbf{3}$ \\
+$7$ & $2$ & $3$ & $1$ & $0$ & $19$ & $4$ & $4$ & $3$ & $2$ & $31$ & $6$ & $5$ & $1$ & $4$ \\
+$8$ & $2$ & $4$ & $0$ & $0$ & $20$ & $4$ & $5$ & $0$ & $2$ & $32$ & $6$ & $5$ & $2$ & $4$ \\
+$9$ & $2$ & $4$ & $1$ & $0$ & $21$ & $4$ & $5$ & $1$ & $2$ & $33$ & $6$ & $5$ & $3$ & $4$ \\
+$10$ & $2$ & $5$ & $0$ & $0$ & $22$ & $4$ & $5$ & $2$ & $2$ & $34$ & $6$ & $5$ & $4$ & $4$ \\
+$11$ & $2$ & $5$ & $1$ & $0$ & $23$ & $4$ & $5$ & $3$ & $2$ & $35$ & $6$ & $5$ & $5$ & $4$ \\
+$\mathbf{12}$ & $\mathbf{2}$ & $\mathbf{6}$ & $\mathbf{0}$ & $\mathbf{0}$ & $\mathbf{24}$ & $\mathbf{4}$ & $\mathbf{6}$ & $\mathbf{0}$ & $\mathbf{2}$ & $\mathbf{36}$ & $\mathbf{6}$ & $\mathbf{6}$ & $\mathbf{0}$ & $\mathbf{4}$ \\
+$13$ & $3$ & $4$ & $1$ & $1$ & $25$ & $5$ & $5$ & $0$ & $3$ & $37$ & $7$ & $5$ & $2$ & $5$ \\
+$14$ & $3$ & $4$ & $2$ & $1$ & $26$ & $5$ & $5$ & $1$ & $3$ & $38$ & $7$ & $5$ & $3$ & $5$ \\
+\bottomrule
+\end{tabular}
+\caption{Minimal spacing $m=\lceil n/6\rceil$, conjoinability $k=\lfloor n/m\rfloor$, slack $\sigma=n-km$ and vertex skipping $s=\max(0,m-2)$ for $3\le n\le38$ (multiples of $6$ in bold).}\label{tab:values}
+\end{table}
+
+\begin{proof}
+(a) was shown in Theorem~\ref{thm:ks}: $m=1$ gives $k=\lfloor n/1\rfloor=n$ and $\sigma=n-n=0$; $s=\max(0,-1)=0$.
+
+(b) If $n=6q$ then $m=\lceil q\rceil=q$ and $k=\lfloor6q/q\rfloor=6$, $\sigma=6q-6q=0$, $s=\max(0,q-2)$.
+
+(c) If $1\le r\le5$ then $6q<n<6(q+1)$, so $m=q+1$ and $s=m-2=q-1$. Since $6(q+1)=6q+6$ we can write $n=6(q+1)-(6-r)$ and
+\[
+\frac nm=\frac{6(q+1)-(6-r)}{q+1}=6-X,\qquad X:=\frac{6-r}{q+1}>0 .
+\]
+For the integer $6$ we have $\lfloor6-X\rfloor=6-\lceil X\rceil$, hence $k=6-\lceil X\rceil$. Now $X\le1\iff q+1\ge6-r$, and then $k=5$.
+\begin{itemize}[nosep]
+\item $q\ge4$: $q+1\ge5\ge6-r$ for all $r\ge1$, so $k=5$.
+\item $q=3$ ($n=19,\dots,23$): $X=\frac{6-r}4$. $r=1$: $X=\frac54\in(1,2]$, $k=4$ ($n=19$). $r\ge2$: $X\le1$, $k=5$.
+\item $q=2$ ($n=13,\dots,17$): $X=\frac{6-r}3$. $r=1,2$: $X=\frac53,\frac43\in(1,2]$, $k=4$ ($n=13,14$). $r\ge3$: $X\le1$, $k=5$.
+\item $q=1$ ($n=7,\dots,11$): $X=\frac{6-r}2$. $r=1$: $X=\frac52\in(2,3]$, $k=3$ ($n=7$). $r=2,3$: $X=2,\frac32\in(1,2]$, $k=4$ ($n=8,9$). $r=4,5$: $X=1,\frac12$, $k=5$ ($n=10,11$).
+\end{itemize}
+For $k=5$: $\sigma=n-5m=(6q+r)-5(q+1)=q+r-5$. For the exceptions $\sigma=n-km$ directly: $n=7$: $m=2$, $7-3\cdot2=1$; $n=8$: $m=2$, $8-4\cdot2=0$; $n=9$: $9-8=1$; $n=13$: $m=3$, $13-4\cdot3=1$; $n=14$: $14-12=2$; $n=19$: $m=4$, $19-4\cdot4=3$.
+\end{proof}
+
+\begin{proposition}[Hexagonal resonance of the conjoinability]\label{prop:hex}
+For every $n\ge3$, $k(n)\le6$, and for $n\ge6$: $k(n)=6\iff6\mid n$. Moreover $k(n)=5$ for every $n\ge20$ with $6\nmid n$.
+\end{proposition}
+\begin{proof}
+From Theorem~\ref{thm:values}: $k=n\le5$ for $n=3,4,5$; $k=6$ for $6\mid n$; and for $6\nmid n$, $n\ge7$, $k=6-\lceil X\rceil\le5$ because $X>0$. The last claim: $n\ge20$, $6\nmid n$ means $q\ge3$, and by Theorem~\ref{thm:values}(c) the only values with $k<5$ are $n\le19$.
+\end{proof}
+
+\begin{corollary}[Slack zero and slack one]\label{cor:sigma}
+For $n\ge7$:
+\begin{enumerate}[label=(\alph*),nosep]
+\item $\sigma(n)=0\iff6\mid n$ or $n\in\{8,10,15,20,25\}$;
+\item $\sigma(n)=1\iff n\in\{7,9,11,13,16,21,26,31\}$;
+\item $\sigma(n)\ge2$ for every $n\ge32$ with $6\nmid n$, and $\sigma(n)\to\infty$ along such $n$.
+\end{enumerate}
+\end{corollary}
+\begin{proof}
+By Theorem~\ref{thm:ks}, $\sigma\equiv n\pmod m$ with $0\le\sigma<m$. For $6\nmid n$ write $n=6m-(6-r)$ with $m=q+1\ge2$ and $1\le6-r\le5$ (every such pair $(m,r)$ gives $\lceil n/6\rceil=m$).
+
+(a) $\sigma=0\iff m\mid n\iff m\mid(6-r)$. With $m\ge2$ and $6-r\in\{1,\dots,5\}$: $6-r=5$ gives $m=5$ ($n=25$); $6-r=4$ gives $m\in\{2,4\}$ ($n=8,20$); $6-r=3$ gives $m=3$ ($n=15$); $6-r=2$ gives $m=2$ ($n=10$); $6-r=1$ has no divisor $\ge2$. For $6\mid n$, $\sigma=0$ by Theorem~\ref{thm:values}(b).
+
+(b) $\sigma=1$ with $m\ge2$ means $n\equiv1\pmod m$, i.e.\ $m\mid n-1=6m-(7-r)$, i.e.\ $m\mid7-r$ with $7-r\in\{2,\dots,6\}$ (for $6\mid n$ the slack is $0$). $7-r=6$ ($r=1$): $m\in\{2,3,6\}$, $n=6m-5=7,13,31$. $7-r=5$ ($r=2$): $m=5$, $n=26$. $7-r=4$ ($r=3$): $m\in\{2,4\}$, $n=6m-3=9,21$. $7-r=3$ ($r=4$): $m=3$, $n=16$. $7-r=2$ ($r=5$): $m=2$, $n=11$.
+
+(c) For $6\nmid n$, $n\ge32$ we have $q\ge5$ and, by Proposition~\ref{prop:hex}, $k=5$, so $\sigma=q+r-5$. If $q\ge6$ then $q+r-5\ge7-5=2$; if $q=5$ then $n=31+(r-1)$ and $r\ge2$ (since $n\ge32$) gives $q+r-5\ge2$. Also $q+r-5\ge q-4\to\infty$.
+\end{proof}
+
+%--------------------------------------------------------------------------------------------------
+\section{Counting placements}\label{sec:counting}
+
+Throughout, $m=m(n)$, $k=k(n)$ and $\sigma=\sigma(n)$.
+
+\begin{theorem}[Number of placements]\label{thm:count}
+For $1\le t\le n/m$ the number of placements of size $t$ is
+\[
+N(n,t)=\frac nt\binom{n-t(m-1)-1}{t-1},
+\]
+and it is $0$ for $t>n/m$. (We also put $N(n,0)=1$.)
+\end{theorem}
+\begin{proof}
+Let $\mathcal P_t$ be the set of placements of size $t$ and $\mathrm{Comp}$ the set of compositions $(g_1,\dots,g_t)$ of $n$ with every $g_i\ge m$.
+Send a pair $(S,e)$ with $S\in\mathcal P_t$ and $e\in S$ to $(e,(g_1,\dots,g_t))$, where $g_i$ are the gaps met when walking from $e$ once around $\Z_n$ in the positive direction.
+By Corollary~\ref{cor:placements} this is a bijection onto $\Z_n\times\mathrm{Comp}$ (the inverse takes partial sums). Each $S$ occurs in exactly $t$ pairs, so $t\,|\mathcal P_t|=n\,|\mathrm{Comp}|$.
+Subtracting $m-1$ from every part turns $\mathrm{Comp}$ into the compositions of $n-t(m-1)$ into $t$ positive parts, of which there are $\binom{n-t(m-1)-1}{t-1}$ (stars and bars).
+\end{proof}
+
+\paragraph{Example: all counts for $n=34$.} Here $m=6$, $k=5$, $\sigma=4$, and $n-t(m-1)-1=34-5t-1=33-5t$:
+\[
+\begin{aligned}
+N(34,1)&=\tfrac{34}{1}\tbinom{28}{0}=34, & N(34,2)&=\tfrac{34}{2}\tbinom{23}{1}=17\cdot23=391,\\
+N(34,3)&=\tfrac{34}{3}\tbinom{18}{2}=\tfrac{34}{3}\cdot153=1734, & N(34,4)&=\tfrac{34}{4}\tbinom{13}{3}=\tfrac{34}{4}\cdot286=2431,\\
+N(34,5)&=\tfrac{34}{5}\tbinom{8}{4}=\tfrac{34\cdot70}{5}=476.
+\end{aligned}
+\]
+For $n=6q$: $N(6q,6)=\frac{6q}{6}\binom{6q-6(q-1)-1}{5}=q\binom55=q$: the extremal placements are exactly the $q$ rotations of the perfect ring.
+
+\begin{proposition}[Placements up to symmetry]\label{prop:burnside}
+Two placements of size $t$ differ by a rotation of $P$ if and only if their cyclic gap sequences differ by a cyclic shift, and by a rotation or a reflection if and only if they differ by a cyclic shift and/or a reversal.
+Hence the number $R(n,t)$ of placements of size $t$ up to rotation, and the number $B(n,t)$ up to rotation and reflection, are the numbers of necklaces and of bracelets of compositions of $n$ into $t$ parts $\ge m$. By Burnside's lemma,
+\[
+R(n,t)=\frac1t\sum_{j=0}^{t-1}F_j,\qquad
+B(n,t)=\frac1{2t}\Big(\sum_{j=0}^{t-1}F_j+G\Big),
+\]
+where, for $h=\gcd(j,t)$ and $w=t/h$ (with $\gcd(0,t)=t$),
+\[
+F_j=\begin{cases}\binom{\,n/w-h(m-1)-1\,}{h-1}&\text{if }w\mid n\text{ and }n/w\ge hm,\\[2pt]0&\text{otherwise,}\end{cases}
+\]
+\[
+G=\begin{cases}t\,W(n;1,\tfrac{t-1}2)&t\text{ odd},\\[2pt]\tfrac t2\big(W(n;2,\tfrac{t-2}2)+W(n;0,\tfrac t2)\big)&t\text{ even,}\end{cases}
+\]
+and $W(n;a,b)$ is the number of pairs $\big((x_1,\dots,x_a),(y_1,\dots,y_b)\big)$ of integers $\ge m$ with $x_1+\dots+x_a+2(y_1+\dots+y_b)=n$.
+\end{proposition}
+\begin{proof}
+Translating $S$ along $\Z_n$ keeps its cyclic gap sequence, and conversely two placements with the same cyclic gap sequence are translates of each other; a reflection $e\mapsto-e$ reverses the gap sequence. This gives the first two sentences.
+The cyclic group $C_t$ (shifts) and the dihedral group $D_t$ (shifts and reversals) act on $\mathrm{Comp}$, and the counts are the numbers of orbits; apply Burnside's lemma $|\text{orbits}|=\frac1{|\Gamma|}\sum_{\gamma\in\Gamma}|\mathrm{Fix}(\gamma)|$.
+A composition fixed by the shift by $j$ is periodic with period $h=\gcd(j,t)$, so it is determined by its first $h$ parts, which sum to $n/w$ (this requires $w\mid n$) and are each $\ge m$; there are $\binom{n/w-h(m-1)-1}{h-1}$ of them. This is $F_j$.
+A reflection of the index set acts as $i\mapsto b-i$ on $\mathbb Z_t$. For $t$ odd every such reflection has exactly one fixed index and $\frac{t-1}2$ pairs $\{i,b-i\}$; for $t$ even, $\frac t2$ reflections have two fixed indices and $\frac{t-2}2$ pairs, and $\frac t2$ reflections have no fixed index and $\frac t2$ pairs.
+A fixed composition has equal parts $y$ on each pair and arbitrary parts $x$ on the fixed indices, so the sum is $\sum x+2\sum y=n$. Counting these gives $W$.
+\end{proof}
+
+\paragraph{Worked example: $n=34$, $t=5$ ($m=6$).} \emph{Rotations.} For $j=0$: $h=5$, $w=1$, so $F_0=\binom{34-5\cdot5-1}{4}=\binom84=70$. For $j=1,2,3,4$: $h=1$, $w=5$, and $5\nmid34$, so $F_j=0$. Hence $R(34,5)=\frac{70}5=14$.
+\emph{Reflections} ($t=5$ odd): $W(34;1,2)$ counts $(x;y_1,y_2)$ with $x,y_1,y_2\ge6$ and $x+2(y_1+y_2)=34$. Put $Y=y_1+y_2\ge12$; then $x=34-2Y\ge6$ forces $Y\le14$.
+$Y=12$: $(y_1,y_2)=(6,6)$, 1 pair, $x=10$. $Y=13$: $(6,7),(7,6)$, 2 pairs, $x=8$. $Y=14$: $(6,8),(7,7),(8,6)$, 3 pairs, $x=6$. So $W=1+2+3=6$ and $G=5\cdot6=30$.
+Hence $B(34,5)=\frac{70+30}{2\cdot5}=10$.
+
+\begin{theorem}[Rigidity of the extremal placement]\label{thm:rigid}
+Let $n\ge7$. The number of extremal placements (size $k$) up to rotation equals $1$ if and only if $\sigma\le1$.
+In particular, if $6\mid n$ the extremal placement is unique up to rotation (the perfect ring).
+\end{theorem}
+\begin{proof}
+Write the gaps as $g_i=m+\epsilon_i$ with $\epsilon_i\ge0$ and $\sum_{i=1}^k\epsilon_i=n-km=\sigma$. Up to rotation, extremal placements correspond to necklaces of such vectors $(\epsilon_1,\dots,\epsilon_k)$.
+If $\sigma=0$ the vector is zero: one necklace. If $\sigma=1$ the vector has a single entry $1$ and zeros elsewhere, and all its cyclic shifts are equivalent: one necklace.
+If $\sigma\ge2$ (recall $k\ge3$ for $n\ge7$), the vectors $(\sigma,0,\dots,0)$ and $(\sigma-1,1,0,\dots,0)$ have different multisets of entries (the largest entry is $\sigma$ in the first and $\sigma-1$ in the second, since $\sigma-1\ge1$), so they are not cyclic shifts of each other: there are at least two necklaces.
+If $6\mid n$ then $\sigma=0$ by Theorem~\ref{thm:values}(b).
+\end{proof}
+
+\begin{corollary}[The rigid values of $n$]\label{cor:rigidn}
+For $n\ge7$ the extremal placement is unique up to rotation if and only if $6\mid n$ or $n\in\{7,8,9,10,11,13,15,16,20,21,25,26,31\}$.
+\end{corollary}
+\begin{proof}
+Theorem~\ref{thm:rigid} gives uniqueness iff $\sigma\le1$, and Corollary~\ref{cor:sigma} lists these $n$: slack $0$ for $6\mid n$ and $n\in\{8,10,15,20,25\}$, slack $1$ for $n\in\{7,9,11,13,16,21,26,31\}$.
+\end{proof}
+
+\begin{theorem}[Tight chains with BA fixed]\label{thm:chain}
+Fix the neighbour on edge $0$ (``BA''). Call a placement of size $k$ containing the edge $0$ a \emph{tight chain} if all its gaps equal $m$ except one, the \emph{pocket}, of size $m+\sigma$.
+Identify a placement with its mirror image in the axis through BA. The number of tight chains is $1$ if $\sigma=0$ and $\lceil k/2\rceil$ if $\sigma>0$.
+\end{theorem}
+\begin{proof}
+If $\sigma=0$ all gaps equal $m$ and there is one chain. Let $\sigma>0$. Counting the gaps from BA, the pocket can be the $j$-th gap, $j=0,1,\dots,k-1$, and different choices give different placements containing the edge $0$.
+The reflection $e\mapsto-e$ of $\Z_n$ fixes the edge $0$ and reverses the gap sequence, so it maps position $j$ to $k-1-j$. Its orbits are the pairs $\{j,k-1-j\}$ with $j\ne k-1-j$ and, if $k$ is odd, the single fixed position $j=\frac{k-1}2$. The number of orbits is $\lceil k/2\rceil$.
+\end{proof}
+
+\paragraph{Example ($n=34$).} Here $k=5$, so $\lceil5/2\rceil=3$. Writing $a{+}b$ for the numbers of tight neighbours met on the two sides of BA before the pocket, the three chains are $4{+}0$ (edges $0,6,12,18,24$), $3{+}1$ ($0,6,12,18,28$) and $2{+}2$ ($0,6,12,22,28$), each with a pocket gap of $m+\sigma=6+4=10$ edges, i.e.\ $8$ untouched central vertices.
+The first two are the GeoGebra files \texttt{34\_placement\_1} and \texttt{34\_placement\_2}; all three are rotations of one arrangement (Figure~\ref{fig:34}).
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\textwidth]{34_placements_relative_to_BA.png}
+\caption{The three tight chains with BA fixed for $n=34$ (BA in red).}\label{fig:34}
+\end{figure}
+
+%--------------------------------------------------------------------------------------------------
+\section{A generating function for placements (hypothesis H3)}\label{sec:gf}
+
+For integers $n\ge m\ge1$ write $N_m(n,t)=\frac nt\binom{n-t(m-1)-1}{t-1}$ for $t\ge1$ and $N_m(n,0)=1$, and define the \emph{placement polynomial}
+\[
+F_{n,m}(x)=\sum_{t\ge0}N_m(n,t)\,x^t ,
+\]
+the generating polynomial for subsets of $\Z_n$ whose elements are pairwise at cyclic distance $\ge m$ (Theorem~\ref{thm:count}). For the $n$-gon take $m=m(n)$ and write $P_n(x):=F_{n,m(n)}(x)$; its coefficients are the numbers of placements by size and $\deg P_n=k(n)$.
+For example $P_{34}(x)=1+34x+391x^2+1734x^3+2431x^4+476x^5$ (the numbers computed after Theorem~\ref{thm:count}).
+
+\begin{theorem}[Placement polynomial as a power sum]\label{thm:gf}
+Let $m\ge1$ and let $\lambda_1(x),\dots,\lambda_m(x)$ be the roots of $\lambda^m=\lambda^{m-1}+x$, and $p_n(x)=\sum_{i=1}^m\lambda_i(x)^n$. Then
+\begin{enumerate}[label=(\alph*),nosep]
+\item $\displaystyle\sum_{n\ge1}p_n(x)\,z^n=\frac{z\,(1+m\,x\,z^{m-1})}{1-z-x\,z^m}=-z\,\frac{\partial}{\partial z}\log\big(1-z-xz^m\big)$;
+\item $F_{n,m}(x)=p_n(x)$ for all $n\ge m$;
+\item $F_{n,m}=F_{n-1,m}+x\,F_{n-m,m}$ for all $n\ge2m$.
+\end{enumerate}
+\end{theorem}
+\begin{proof}
+(a) Let $\chi(\lambda)=\lambda^m-\lambda^{m-1}-x=\prod_{i=1}^m(\lambda-\lambda_i)$. Then
+\[
+\begin{aligned}
+z^m\chi(1/z)&=z^m\big(z^{-m}-z^{-(m-1)}-x\big)=1-z-xz^m,\\
+z^m\chi(1/z)&=\prod_i z\,(1/z-\lambda_i)=\prod_i(1-\lambda_iz),
+\end{aligned}
+\]
+so $1-z-xz^m=\prod_i(1-\lambda_iz)$. Taking the logarithmic derivative, and expanding each geometric series,
+\[
+-z\frac{\partial}{\partial z}\log\prod_i(1-\lambda_iz)=\sum_i\frac{\lambda_iz}{1-\lambda_iz}=\sum_i\sum_{n\ge1}\lambda_i^nz^n=\sum_{n\ge1}p_nz^n .
+\]
+On the other hand $\frac{\partial}{\partial z}(1-z-xz^m)=-(1+mxz^{m-1})$, so the same expression equals $\frac{z(1+mxz^{m-1})}{1-z-xz^m}$.
+
+(b) \emph{Step 1.} Write $1-z-xz^m=(1-z)\big(1-\tfrac{xz^m}{1-z}\big)$ and expand the geometric series in $x$:
+\[
+\frac1{1-z-xz^m}=\sum_{t\ge0}\frac{x^tz^{mt}}{(1-z)^{t+1}}.
+\]
+\emph{Step 2.} Multiply by $z+mxz^m$ and re-index the second sum ($t+1\to t$):
+\[
+\frac{z(1+mxz^{m-1})}{1-z-xz^m}=\sum_{t\ge0}\frac{x^tz^{mt+1}}{(1-z)^{t+1}}+m\sum_{t\ge1}\frac{x^tz^{mt}}{(1-z)^{t}} .
+\]
+\emph{Step 3.} Use $[z^j](1-z)^{-\rho}=\binom{j+\rho-1}{\rho-1}$ for $j\ge0$ (and $0$ for $j<0$), and put $M:=n-t(m-1)-1$. Then
+\[
+\begin{aligned}
+[z^n]\frac{z^{mt+1}}{(1-z)^{t+1}}&=\binom{n-mt-1+t}{t}=\binom Mt,\\
+m\,[z^n]\frac{z^{mt}}{(1-z)^{t}}&=m\binom{n-mt+t-1}{t-1}=m\binom M{t-1},
+\end{aligned}
+\]
+where a binomial coefficient $\binom Mj$ is read as $0$ when $M<j$ (this covers the cases $n<mt+1$ resp.\ $n<mt$). Hence for $t\ge1$ the coefficient of $x^tz^n$ is $\binom Mt+m\binom M{t-1}$. Since $\binom Mt=\binom M{t-1}\frac{M-t+1}t$,
+\[
+\binom Mt+m\binom M{t-1}=\binom M{t-1}\,\frac{M-t+1+mt}{t}=\binom M{t-1}\,\frac nt=N_m(n,t),
+\]
+because $M-t+1+mt=\big(n-tm+t-1\big)-t+1+mt=n$. For $t=0$ only the first sum contributes and $[z^n]\frac z{1-z}=1=N_m(n,0)$ for $n\ge1$.
+So $[x^tz^n]\sum_{n}p_nz^n=N_m(n,t)$ for all $t$ and $n\ge m$, which is (b).
+
+(c) Multiply $\lambda_i^m=\lambda_i^{m-1}+x$ by $\lambda_i^{n-m}$ to get $\lambda_i^n=\lambda_i^{n-1}+x\lambda_i^{n-m}$, and sum over $i$: $p_n=p_{n-1}+x\,p_{n-m}$. For $n\ge2m$ both $n-1$ and $n-m$ are $\ge m$, so (b) turns this into the claim.
+\end{proof}
+
+\paragraph{Example ($m=2$).} The roots of $\lambda^2=\lambda+x$ satisfy $\lambda_1+\lambda_2=1$, $\lambda_1\lambda_2=-x$, so $p_1=1$, $p_2=1+2x$, and by (c) $p_n=p_{n-1}+xp_{n-2}$: $p_3=1+3x$, $p_4=1+4x+2x^2$, $p_5=1+5x+5x^2$.
+This agrees with $N_2(5,1)=5$, $N_2(5,2)=\frac52\binom{2}{1}=5$ (subsets of the $5$-cycle with no two adjacent elements).
+
+\begin{corollary}[``Re-entry into $k=6$'']\label{cor:reentry}
+The $n$-gons with minimal spacing $m(n)=m\ge2$ are exactly $n=6m-5,6m-4,\dots,6m$. On this window $P_n=F_{n,m}$ and $\deg P_n=\lfloor n/m\rfloor$, which equals $6$ only at the right end $n=6m$, where $[x^6]P_{6m}=m$. Thus $[x^6]P_n\ne0\iff6\mid n$, and the full sequence $(P_n)$ is obtained by concatenating the six-term windows of the rational functions $\dfrac{z(1+mxz^{m-1})}{1-z-xz^m}$, $m=2,3,\dots$
+\end{corollary}
+\begin{proof}
+$\lceil n/6\rceil=m\iff6(m-1)<n\le6m$. On the window, $\lfloor n/m\rfloor=6$ iff $n\ge6m$, i.e.\ $n=6m$. The coefficient is $N_m(6m,6)=\frac{6m}6\binom{6m-6(m-1)-1}{5}=m\binom55=m$. The remaining claims follow from Theorems~\ref{thm:ks}, \ref{thm:count} and \ref{thm:gf}.
+\end{proof}
+
+\begin{remark}
+This is the exact content that the sentence ``a generating function $P(x,y)$ models the periodic re-entry into $k=6$ states'' can have. The one-variable generating function of the conjoinability itself is trivial: $k(n)=5+[6\mid n]$ for $n\ge20$, so $\sum_nk(n)z^n$ is a polynomial plus $\frac{5z^{20}}{1-z}+\frac{z^{24}}{1-z^6}$.
+\end{remark}
+
+%--------------------------------------------------------------------------------------------------
+\section{Tension and the discrete-to-continuous profile (hypotheses H4, H5)}\label{sec:tension}
+
+Recall Definition~\ref{def:tension}: the tension $\tau(n)=\dist(N_e,N_f)/\ell$ for edges at the minimal spacing $m(n)$, in units of the side $\ell=2\sin\frac\pi n$. By Corollary~\ref{cor:criterion}, with $c=c_{ef}$,
+\begin{equation}\label{eq:tau}
+\tau(n)=\frac{\dist(c,D)}{\ell},\qquad|c|=4a\sin\frac{\pi m}n .
+\end{equation}
+
+\begin{theorem}[Tension]\label{thm:tension}
+\begin{enumerate}[label=(\roman*),nosep]
+\item For $3\le n\le6$, $\tau(n)=0$.
+\item For $n\ge7$: $\tau(n)=0\iff6\mid n\iff k(n)=6$. Thus a maximally tense packing is exactly a hexagonal resonance, and this is a theorem rather than an empirical observation.
+\item Let $n\ge7$, $6\nmid n$, $r=n\bmod6$, $\kappa=\frac{6-r}{6}$ and $u=\frac\pi n$. Then, for all such $n$,
+\[
+\Big|\,\tau(n)-\sqrt3\,\kappa\,\Big|\ \le\ \Big(\frac{\kappa^2}{2}+1\Big)\,u .
+\]
+More precisely, with $\Lambda_n:=(|c|-2a)/\ell$,
+\[
+\Lambda_n=\sqrt3\,\kappa-\frac{\kappa^2}{2}\,u+\theta_n\,u^2\ \ (-0.9\le\theta_n\le0.26),\qquad 0\le\Lambda_n-\tau(n)\le\tan\tfrac u2\le0.51\,u .
+\]
+\end{enumerate}
+In particular $\tau(n)\to\sqrt3\,\kappa=\frac{\sqrt3}{6}\,\big((-n)\bmod6\big)$ along each residue class $r\ne0$, with an error of order $1/n$ and explicit constants (Table~\ref{tab:tension}).
+\end{theorem}
+
+\begin{table}[ht]
+\centering\small
+\begin{tabular}{cccccc}
+\toprule
+$r$ & $\kappa$ & $\sqrt3\,\kappa$ & $(\frac{\kappa^2}2+1)\pi$ & observed max & ratio\\
+\midrule
+$1$ & $5/6$ & $1.4434$ & $4.232$ & $3.104$ & $0.73$ \\
+$2$ & $4/6$ & $1.1547$ & $3.840$ & $1.238$ & $0.32$ \\
+$3$ & $3/6$ & $0.8660$ & $3.534$ & $1.920$ & $0.54$ \\
+$4$ & $2/6$ & $0.5774$ & $3.316$ & $1.954$ & $0.59$ \\
+$5$ & $1/6$ & $0.2887$ & $3.185$ & $1.315$ & $0.41$ \\
+\bottomrule
+\end{tabular}
+\caption{For $r=n\bmod6\in\{1,\dots,5\}$ and $\kappa=\frac{6-r}6$: the limit $\sqrt3\kappa$ of the tension, the constant $(\frac{\kappa^2}2+1)\pi$ in Theorem~\ref{thm:tension}(iii) (the bound reads $|\tau(n)-\sqrt3\kappa|\le(\frac{\kappa^2}2+1)\frac\pi n$), the largest value of $n\,|\tau(n)-\sqrt3\kappa|$ found for $7\le n\le3000$ (``observed max''), and the ratio of the last two.}\label{tab:tension}
+\end{table}
+
+\begin{proof}
+(i) For $n\le6$, $m=1$: the neighbours on the adjacent edges $e$ and $e+1$ both contain the common vertex $v_{e+1}$ of those edges (it is an endpoint of edge $e\subseteq N_e$ and of edge $e+1\subseteq N_{e+1}$), so their distance is $0$.
+
+(ii) If $6\mid n$, then $\tau=0$ by Theorem~\ref{thm:spacing}(c) (they touch). If $6\nmid n$, then $m=d_0$ in the proof of Theorem~\ref{thm:spacing}(b), where $|c|>R_D$ was shown; hence $c\notin D$, $\dist(c,D)>0$ and $\tau>0$. The equivalence with $k=6$ is Proposition~\ref{prop:hex}.
+
+(iii) Let $n\ge7$, $6\nmid n$. Then $u\le\pi/7=0.4488\ldots$ and $\kappa\le\frac56$. We prove the three displayed statements in four steps.
+
+\emph{Step 1: $\tau$ is within $\tan\frac u2$ below $\Lambda_n$.}
+Since $D\subseteq\{|x|\le R_D\}$ we have $\dist(c,D)\ge|c|-R_D$. Since $|c|>R_D\ge r_D$, the point $\frac{r_D}{|c|}c$ lies in the disc of radius $r_D$, hence in $D$, so $\dist(c,D)\le|c|-r_D$. Dividing by $\ell$ and subtracting $\Lambda_n=(|c|-2a)/\ell$,
+\[
+\frac{2a-R_D}{\ell}\ \le\ \tau(n)-\Lambda_n\ \le\ \frac{2a-r_D}{\ell}.
+\]
+By Lemma~\ref{lem:D}: for even $n$, $R_D=2$, $r_D=2a$; for odd $n$, $R_D=2\cos\frac u2\le2$ and $r_D=1+a\ge2a$. In both cases $2a-r_D\le0$ and $2a-R_D\ge2a-2$, so
+\[
+-\frac{2-2a}{\ell}\le\tau(n)-\Lambda_n\le0,\qquad\frac{2-2\cos u}{\ell}=\frac{2(1-\cos u)}{2\sin u}=\tan\frac u2 .
+\]
+For the last inequality in the theorem: $\tan y/y$ is increasing on $(0,\frac\pi2)$, so for $y=\frac u2\le\frac\pi{14}$ we get $\tan\frac u2\le\frac u2\cdot\frac{\tan(\pi/14)}{\pi/14}=1.0172\cdot\frac u2\le0.51\,u$.
+
+\emph{Step 2: closed form of $\Lambda_n$.} Write $n=6q+r$. Then $m=q+1$ and $\frac{m}{n}-\frac16=\frac{6(q+1)-n}{6n}=\frac{6-r}{6n}$, so $\frac{\pi m}{n}=\frac\pi6+x$ with $x:=\kappa u$ (and $0<x\le\frac56\cdot\frac\pi7=0.374$). Using $\sin(\frac\pi6+x)=\frac12\cos x+\frac{\sqrt3}2\sin x$ in \eqref{eq:tau},
+\[
+\begin{aligned}
+|c|&=4a\sin\big(\tfrac\pi6+x\big)=2a\,(\cos x+\sqrt3\sin x),\\
+\Lambda_n&=\frac{|c|-2a}{2\sin u}=\cos u\cdot\frac{N(x)}{\sin u},\qquad N(x):=\cos x+\sqrt3\sin x-1 .
+\end{aligned}
+\]
+Note $N(x)=2\sin(x+\frac\pi6)-1\ge0$ for $x\ge0$.
+
+\emph{Step 3: four elementary inequalities.} For $y\ge0$,
+\[
+\text{(E1) }\sin y\le y,\quad\text{(E2) }\cos y\ge1-\tfrac{y^2}2,\quad\text{(E3) }\sin y\ge y-\tfrac{y^3}6,\quad\text{(E4) }\cos y\le1-\tfrac{y^2}2+\tfrac{y^4}{24}.
+\]
+They follow by successive integration: (E1) integrates $\cos t\le1$ over $[0,y]$; (E2) integrates (E1) via $\cos y=1-\int_0^y\sin t\,dt$; (E3) integrates (E2) via $\sin y=\int_0^y\cos t\,dt$; (E4) integrates (E3) via $\cos y=1-\int_0^y\sin t\,dt$.
+With $x=\kappa u$ and (E1)--(E4) applied to $N$:
+\[
+N_-:=\sqrt3\kappa u-\tfrac{\kappa^2u^2}{2}-\tfrac{\sqrt3}{6}\kappa^3u^3\ \le\ N(x)\ \le\ N_+:=\sqrt3\kappa u-\tfrac{\kappa^2u^2}{2}+\tfrac{\kappa^4u^4}{24},
+\]
+and, for the other factors, $u-\frac{u^3}6\le\sin u\le u$ and $1-\frac{u^2}2\le\cos u\le1$.
+Put $L:=\sqrt3\kappa-\frac{\kappa^2}{2}u$.
+
+\emph{Step 4a: upper bound for $\Lambda_n$.} Since $\cos u\le1$ and $N\ge0$,
+\[
+\Lambda_n\le\frac{N_+}{\sin u}\le\frac{N_+}{u(1-u^2/6)}=\frac{A}{1-t},\qquad A:=\sqrt3\kappa-\tfrac{\kappa^2}2u+\tfrac{\kappa^4}{24}u^3,\ \ t:=\tfrac{u^2}6\le0.0336 .
+\]
+Now $\frac1{1-t}=1+\frac t{1-t}\le1+1.035\,t$, and $A\le\sqrt3\cdot\frac56+\frac{(5/6)^4}{24}\big(\frac\pi7\big)^3\le1.445$. Hence
+\[
+\Lambda_n-L\le(A-L)+1.035\,t\,A\le\tfrac{\kappa^4}{24}u^3+1.035\cdot\tfrac{u^2}6\cdot1.445\le u^2\Big(\tfrac{(5/6)^4}{24}\cdot0.4489+0.2492\Big)\le0.26\,u^2 .
+\]
+
+\emph{Step 4b: lower bound for $\Lambda_n$.} Since $\sin u\le u$, $N\ge N_-\ge0$ (indeed $N_-=u\kappa\big(\sqrt3-\frac{\kappa u}2-\frac{\sqrt3}6\kappa^2u^2\big)>0$ for $\kappa u\le0.374$) and $\cos u\ge1-\frac{u^2}2>0$,
+\[
+\Lambda_n\ge\Big(1-\frac{u^2}2\Big)\frac{N_-}{u}=\Big(1-\frac{u^2}2\Big)\Big(L-\tfrac{\sqrt3}6\kappa^3u^2\Big)\ \ge\ L-\tfrac{\sqrt3}{6}\kappa^3u^2-\tfrac{u^2}{2}\sqrt3\kappa ,
+\]
+where in the last step we used $0\le L-\frac{\sqrt3}6\kappa^3u^2\le\sqrt3\kappa$. As $\kappa\le\frac56$, $\frac{\sqrt3}6\kappa^3+\frac{\sqrt3}2\kappa\le0.1671+0.7217=0.8888\le0.9$, so $\Lambda_n-L\ge-0.9\,u^2$.
+Steps 4a and 4b prove $\Lambda_n=\sqrt3\kappa-\frac{\kappa^2}2u+\theta_nu^2$ with $-0.9\le\theta_n\le0.26$.
+
+\emph{Step 5: combination.} By Step 1 and Steps 4a, 4b,
+\[
+\begin{aligned}
+|\tau-\sqrt3\kappa|&\le|\tau-\Lambda_n|+|\Lambda_n-L|+|L-\sqrt3\kappa|\\
+&\le0.51\,u+0.9\,u^2+\tfrac{\kappa^2}2u\ \le\ \tfrac{\kappa^2}2u+u\,(0.51+0.9\cdot0.4489)\ \le\ \Big(\tfrac{\kappa^2}2+1\Big)u,
+\end{aligned}
+\]
+since $0.51+0.404=0.914<1$.
+\end{proof}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.85\textwidth]{sawtooth.pdf}
+\caption{The exact tension $\tau(n)$ (dots) for $7\le n\le120$ and its limiting sawtooth (dashes; period $6$, zeros at the resonances).}\label{fig:saw}
+\end{figure}
+
+\begin{proposition}[Discretised kissing number]\label{prop:kiss}
+Let $\phi(n)=k(n)\,m(n)/n$ be the fraction of edges occupied by an extremal placement. Then
+$\limsup k(n)=6$ and $\liminf k(n)=5$, so the conjoinability has no limit; $\phi(n)=1$ for $6\mid n$, while $\phi(n)\to\frac56$ along every other residue class.
+Equivalently, the circle's kissing configuration (neighbours at angular spacing $\pi/3$) is attained by the polygon exactly when $\pi/3\in\frac{2\pi}n\Z$, i.e.\ $6\mid n$.
+\end{proposition}
+\begin{proof}
+By Proposition~\ref{prop:hex}, $k=5+[6\mid n]$ for $n\ge20$, which gives $\limsup=6$, $\liminf=5$. For $6\nmid n$, $m=\frac{n+6-r}6$ and $\phi(n)=\frac{5m}n=\frac56\big(1+\frac{6-r}n\big)\to\frac56$; for $6\mid n$, $\phi=\frac{6\cdot n/6}{n}=1$.
+Last statement: $\frac\pi3=\frac{2\pi}n\cdot\frac n6$.
+\end{proof}
+
+\begin{remark}[What this does to the hand-assigned labels]
+In the spreadsheet the label ``Maximally Tense'' occurs at $n=13,18,24,30,36,42,48,54$, but not at $n=6,12$ or $174$ (all with $k=6$), and $n=13$ has $k=4$. So the labels are not a function of the conjoinability, and ``all $k=6$ points are Maximally Tense'' is false as a statement about the labels (it holds for $18\le n\le54$ only). Theorem~\ref{thm:tension}(ii) replaces it by a measurable quantity for which it is true for every $n$.
+Rigidity (Theorem~\ref{thm:rigid} and Corollary~\ref{cor:rigidn}) is the objective version of ``resonance collapses the isomers to one perfect configuration'': the extremal placement is unique up to rotation iff $\sigma\le1$.
+\end{remark}
+
+%--------------------------------------------------------------------------------------------------
+\section{Status of the hypotheses}\label{sec:status}
+
+\begin{center}
+\small
+\begin{tabular}{p{3.0cm}p{6.2cm}p{5.2cm}}
+\toprule
+Hypothesis & Formal statement & Status\\
+\midrule
+H1 resonance of the conjoinability & $k(n)=\lfloor n/\lceil n/6\rceil\rfloor$; $k(n)=6\iff6\mid n$ (Thm.~\ref{thm:ks}, Prop.~\ref{prop:hex}) & Proved (Thm.~\ref{thm:spacing})\\
+H2 vertex skipping & $s(n)=\max(0,\lceil n/6\rceil-2)$, non-decreasing; explicit values of $k,\sigma,s$ (Thm.~\ref{thm:values}) & Proved\\
+H3 generating function & $P_n(x)=\sum\lambda_i^n$, $\lambda^m=\lambda^{m-1}+x$; $\deg P_n=6\iff6\mid n$ (Thm.~\ref{thm:gf}, Cor.~\ref{cor:reentry}) & Proved\\
+H4 tension & $\tau(n)=0\iff6\mid n$ (Thm.~\ref{thm:tension}(ii)); the label-based version is false as stated & Replaced by a proved statement\\
+H5 discrete-to-continuous & sawtooth limit of $\tau$ with the explicit bound of Thm.~\ref{thm:tension}(iii); Prop.~\ref{prop:kiss} & Proved. Convergence of the full overlap profile to the disc's lens profile is \emph{not} proved here\\
+H6 flexibility and rigidity & counts (Thm.~\ref{thm:count}), rigid $n$ (Thm.~\ref{thm:rigid}, Cor.~\ref{cor:rigidn}), tight chains (Thm.~\ref{thm:chain}) & Proved\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Not covered.} The only external ingredient is the convex-analysis identity $\operatorname{ri}(C_1+C_2)=\operatorname{ri}C_1+\operatorname{ri}C_2$ (cited in Lemma~\ref{lem:diffbody}); the numerical values quoted in Lemma~\ref{lem:trig} and Proposition~\ref{prop:small} are finite checks.
+
+%--------------------------------------------------------------------------------------------------
+\section{Computational cross-checks}\label{sec:verif}
+
+The statements above were also checked by program (exact polygon intersection with \texttt{shapely}; scripts \texttt{Polygon\_solver.py} and \texttt{Polygon\_placements.py}, test suite of $100$ tests):
+\begin{itemize}[nosep]
+\item Lemma~\ref{lem:translate} for $n\in\{7,8,13,25,34,36,41\}$ and all edges; Corollary~\ref{cor:criterion} for all $5\le n\le80$ and all $d\le n/2$ ($1596$ cases, no mismatch); Lemma~\ref{lem:D} for $n\in\{8,12,13,25\}$.
+\item Theorem~\ref{thm:spacing}: the exact solver's smallest admissible distance equals $\lceil n/6\rceil$ for every $n\le400$, and overlap at \emph{every} distance $d\le n/2$ agrees with ``overlap iff $d<n/6$'' for every $n\le160$; the two inequalities of the proof (Lemma~\ref{lem:trig} applied to $d_0$) were additionally checked for every $n\le2\cdot10^6$.
+\item Proposition~\ref{prop:shared}: for $n=12,18,24,36,60,102$ the neighbours on edges $0$ and $n/6$ share exactly one full edge: two vertices and the segment between them, of length $\ell$. (The program compares vertices: exactly two coincide, at distance $\ell$; since vertices of a regular polygon at distance $\ell$ are adjacent, the segment between them is an edge of both. Generic polygon-intersection routines return unstable shapes for exactly touching polygons, so the code uses a tolerance of $10^{-12}$ on the overlap area.)
+\item Theorems~\ref{thm:ks}--\ref{thm:values} and Corollary~\ref{cor:sigma}: the identities $\sigma=n\bmod m$ and $\sigma=q+r-5$ (when $k=5$) and the lists of $n$ with $\sigma=0$ and $\sigma=1$ for all $7\le n\le20000$; Theorem~\ref{thm:rigid} and Corollary~\ref{cor:rigidn} by enumeration for $7\le n\le400$.
+\item Theorem~\ref{thm:count} and Proposition~\ref{prop:burnside}: brute-force enumeration of all subsets using pairwise polygon intersections for $n\le16$, and enumeration versus closed form for larger $n$ (including the worked example $R(34,5)=14$, $B(34,5)=10$).
+\item Theorem~\ref{thm:gf}: coefficient identity for $1\le m\le12$, $m\le n<140$, and a numerical root check.
+\item Theorem~\ref{thm:tension}: the three displayed inequalities of (iii) and the intermediate bounds $-0.9\le\theta_n\le0.26$ and $0\le\Lambda_n-\tau\le\tan\frac u2$ were checked for every $7\le n\le3000$, $6\nmid n$ (largest observed ratio $|\tau-\sqrt3\kappa|/((\kappa^2/2+1)u)=0.73$; Table~\ref{tab:tension}).
+\end{itemize}
+
+\vfill
+{\footnotesize\noindent\emph{Note.} The code and first drafts of the proofs were prepared with AI assistance (Claude); the problem, definitions, drawings and data are the author's.\par}
+
+\end{document}

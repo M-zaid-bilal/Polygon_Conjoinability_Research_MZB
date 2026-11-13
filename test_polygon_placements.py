@@ -290,3 +290,240 @@ def test_chain_counts_by_k():
     # slack > 0: k=3 -> 2, k=4 -> 2, k=5 -> 3
     assert pp.count_chain(7) == 2 and pp.count_chain(9) == 2 and pp.count_chain(34) == 3 and pp.count_chain(55) == 3
     assert pp.count_chain(36) == 1 and pp.count_chain(174) == 1
+
+
+# --------------------------------------------------------------------------- tension: the contact gap
+def test_contact_gap_equals_exact_polygon_distance():
+    for n in range(3, 61):
+        m = pp.min_gap(n)
+        side = 2 * math.sin(math.pi / n)
+        exact = ps.neighbour(n, 0).distance(ps.neighbour(n, m)) / side
+        assert abs(pp.contact_gap(n) - exact) < 1e-9, n
+
+
+def test_contact_gap_is_zero_exactly_at_the_resonances():
+    for n in range(7, 301):
+        assert (pp.contact_gap(n) < 1e-9) == (n % 6 == 0), n
+    for n in range(3, 7):
+        assert pp.contact_gap(n) < 1e-9                              # n <= 6: neighbours never separate
+
+
+def test_contact_gap_converges_to_the_sawtooth():
+    worst = max(abs(pp.contact_gap(n) - pp.sawtooth_limit(n)) * n for n in range(40, 601))
+    assert worst < 2.6                                              # error is O(1/n): n*error stays bounded
+    assert abs(pp.sawtooth_limit(37) - math.sqrt(3) / 6 * 5) < 1e-12 and pp.sawtooth_limit(36) == 0.0
+
+
+def test_tension_explicit_bound_of_theorem_7_1_iii():
+    """|tau - sqrt3*kappa| <= (kappa^2/2 + 1) u, with the intermediate bounds proved in the report."""
+    for n in range(7, 601):
+        if n % 6 == 0:
+            continue
+        r = n % 6
+        kappa, u = (6 - r) / 6, math.pi / n
+        tau = pp.tension(n)
+        assert abs(tau - math.sqrt(3) * kappa) <= (kappa ** 2 / 2 + 1) * u, n
+        a, ell, m = math.cos(u), 2 * math.sin(u), -(-n // 6)
+        c = 4 * a * math.sin(math.pi * m / n)
+        lam = (c - 2 * a) / ell                                   # Lambda_n of the report
+        theta = (lam - (math.sqrt(3) * kappa - kappa ** 2 * u / 2)) / u ** 2
+        assert -0.9 <= theta <= 0.26, (n, theta)
+        assert -1e-9 <= lam - tau <= math.tan(u / 2) + 1e-9, n   # Step 1 of the proof
+
+
+# =========================================================================== completeness: edge branches
+def test_single_neighbour_and_empty_placement_edge_cases():
+    p = pp._make(25, [0])
+    assert p.size == 1 and p.kind == "single" and p.contacts == () and p.gaps == (25,)
+    assert p.untouched == (23,) and pp.verify_placement_geometry(25, [0])
+    assert pp.count_labelled(25, 0) == 1 and pp.count_classes(25, 0) == (1, 1)
+    assert pp.count_labelled(25, 6) == 0 and pp.count_classes(25, 6) == (0, 0)      # six do not fit
+    assert pp.count_classes(25, -1) == (0, 0) and pp.count_labelled(25, -1) == 0
+    assert pp._solutions(0, 0, 0, 3) == 1 and pp._solutions(5, 0, 0, 3) == 0        # empty-sum branch
+
+
+def test_conflict_distances_are_exactly_the_distances_below_the_minimal_spacing():
+    assert pp.conflict_distances(25) == {1, 2, 3, 4}                                # m(25) = 5
+    assert pp.conflict_distances(36) == {1, 2, 3, 4, 5}                             # m(36) = 6
+    assert pp.conflict_distances(6) == set()                                        # m = 1: nothing conflicts
+    for n in (7, 8, 13, 14, 19, 31):
+        assert pp.conflict_distances(n) == set(range(1, pp.min_gap(n)))
+
+
+def test_iteration_limits_in_every_symmetry_mode():
+    for sym in ("rotation", "dihedral", "none"):
+        got = list(pp.iter_placements(34, 5, sym, limit=3))
+        assert len(got) == 3 and len({p.edges for p in got}) == 3, sym
+    allnone = list(pp.iter_placements(25, 5, "none"))
+    assert len(allnone) == 5 and len({p.edges for p in allnone}) == 5               # periodic ring: 5 rotations, no duplicates
+    assert pp.list_placements(25, 5, "none", limit=None, order="balanced") == sorted(
+        allnone, key=lambda p: (max(p.gaps) - min(p.gaps), p.gaps, p.edges))
+
+
+def test_chain_placements_edge_cases():
+    assert pp.chain_placements(25, 6) == [] and pp.chain_placements(25, 0) == []
+    assert pp.count_chain(25, 6) == 0 and pp.count_chain(25, 0) == 0
+    one = pp.chain_placements(25, 1)
+    assert len(one) == 1 and one[0].placement.edges == (0,) and pp.count_chain(25, 1) == 1
+    shorter = pp.chain_placements(34, 3)                                            # a chain of 3 with slack 34 - 18 = 16
+    assert len(shorter) == pp.count_chain(34, 3) == 2
+    assert all(c.placement.gaps and sorted(c.placement.gaps)[:2] == [6, 6] for c in shorter)
+    assert all(pp.is_valid(34, c.placement.edges) for c in shorter)
+
+
+def test_lowercase_module_name_fallback(tmp_path):
+    """Polygon_placements imports Polygon_solver, and falls back to polygon_solver (lowercase)."""
+    import pathlib, shutil, subprocess, sys
+    shutil.copy(pathlib.Path(ps.__file__), tmp_path / "polygon_solver.py")          # only the lowercase name exists here
+    shutil.copy(pathlib.Path(pp.__file__), tmp_path / "Polygon_placements.py")
+    out = subprocess.run([sys.executable, "-c", "import Polygon_placements as p; print(p.ps.__name__, p.max_size(25))"],
+                         cwd=tmp_path, capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.split() == ["polygon_solver", "5"]
+
+
+# =========================================================================== completeness: command line
+def test_cli_count(capsys):
+    assert pp.main(["count", "34"]) == 0
+    out = capsys.readouterr().out
+    assert "minimum gap m = 6" in out and "largest placement k = 5" in out and "slack = 4" in out
+    assert "476" in out and "1734" in out
+
+
+def test_cli_list_and_empty_list(capsys):
+    assert pp.main(["list", "34", "--size", "5", "--symmetry", "dihedral", "--limit", "3"]) == 0
+    out = capsys.readouterr().out
+    assert "gaps" in out and "open" in out and out.count("\n") >= 4
+    assert pp.main(["list", "25", "--size", "6"]) == 1
+    assert "no valid placement" in capsys.readouterr().out
+
+
+def test_cli_chains(capsys):
+    assert pp.main(["chains", "34"]) == 0
+    out = capsys.readouterr().out
+    assert "4+0" in out and "3+1" in out and "2+2" in out and "mirror images identified" in out
+    assert pp.main(["chains", "34", "--no-mirror"]) == 0
+    out = capsys.readouterr().out
+    assert "0+4" in out and "1+3" in out and "listed separately" in out
+    assert pp.main(["chains", "25", "--size", "6"]) == 1
+    assert "no tight chain" in capsys.readouterr().out
+
+
+def test_cli_check_success_failure_and_bad_arguments(capsys, monkeypatch):
+    assert pp.main(["check", "--n-min", "7", "--n-max", "30"]) == 0
+    assert "overlap exactly when edge distance < min_gap" in capsys.readouterr().out
+    monkeypatch.setattr(pp, "check_conflict_structure", lambda n: n != 9)
+    assert pp.main(["check", "--n-min", "7", "--n-max", "12"]) == 1
+    assert "FAILS at n = [9]" in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        pp.main([])                                                                 # a sub-command is required
+    with pytest.raises(SystemExit):
+        pp.main(["list", "34", "--symmetry", "sideways"])
+
+
+# =========================================================================== completeness: theorems of the report
+def _counts_poly(n, m):
+    """Coefficients of F_{n,m}(x) from the counting formula (Theorem 5.1), independent of the geometry."""
+    return [1] + [n * math.comb(n - t * (m - 1) - 1, t - 1) // t for t in range(1, n // m + 1)]
+
+
+def _recurrence_poly(n, m):
+    """p_n(x) from p_0 = m, p_j = 1 (0 < j < m), p_j = p_{j-1} + x p_{j-m}  (Theorem 6.1(c))."""
+    def add(a, b):
+        size = max(len(a), len(b))
+        return [(a[i] if i < len(a) else 0) + (b[i] if i < len(b) else 0) for i in range(size)]
+    p = [[m]] + [[1] for _ in range(1, m)]
+    for j in range(m, n + 1):
+        p.append(add(p[j - 1], [0] + p[j - m]))
+    out = p[n]
+    while out and out[-1] == 0:
+        out = out[:-1]
+    return out
+
+
+def test_theorem_6_1_generating_function_identity():
+    for m in range(1, 9):
+        for n in range(m, 70):
+            assert _recurrence_poly(n, m) == _counts_poly(n, m), (n, m)
+    import numpy as np                                                              # and with the actual roots
+    x, m, n = 0.37, 5, 41
+    roots = np.roots([1, -1] + [0] * (m - 2) + [-x])
+    assert sum(r ** n for r in roots).real == pytest.approx(sum(c * x ** t for t, c in enumerate(_counts_poly(n, m))))
+
+
+def test_theorem_6_1_for_m_equals_2_is_the_lucas_polynomial():
+    assert _recurrence_poly(5, 2) == [1, 5, 5] == _counts_poly(5, 2)
+    assert _recurrence_poly(4, 2) == [1, 4, 2] and _recurrence_poly(3, 2) == [1, 3]
+
+
+def test_placement_polynomial_of_the_n_gon_and_corollary_6_2():
+    assert _counts_poly(34, 6) == [1, 34, 391, 1734, 2431, 476]                     # P_34(x)
+    table = pp.count_by_size(34)
+    assert list(table["labelled"]) == [34, 391, 1734, 2431, 476]
+    for n in range(7, 121):                                                         # module == formula, degree == k(n)
+        poly = _counts_poly(n, pp.min_gap(n))
+        assert len(poly) - 1 == pp.max_size(n)
+        assert [1] + list(pp.count_by_size(n)["labelled"]) == poly
+    for m in range(2, 11):                                                          # windows 6m-5 .. 6m
+        for n in range(6 * m - 5, 6 * m + 1):
+            assert pp.min_gap(n) == m
+        assert pp.max_size(6 * m) == 6 and pp.count_labelled(6 * m, 6) == m
+        assert all(pp.max_size(n) < 6 for n in range(6 * m - 5, 6 * m))
+
+
+def test_burnside_worked_example_n34_t5():
+    assert math.comb(8, 4) == 70 and 70 // 5 == 14                                  # rotations: F_0 = 70, others 0
+    assert pp._solutions(34, 1, 2, 6) == 6 and 5 * 6 == 30                          # reflections
+    assert (70 + 30) // 10 == 10
+    assert pp.count_classes(34, 5) == (14, 10)
+
+
+def test_corollary_4_4_values_of_the_slack():
+    ceil6 = lambda n: -(-n // 6)
+    sigma = lambda n: n - (n // ceil6(n)) * ceil6(n)
+    nonmult = [n for n in range(7, 5001) if n % 6]
+    assert [n for n in nonmult if sigma(n) == 0] == [8, 10, 15, 20, 25]
+    assert [n for n in range(7, 5001) if sigma(n) == 1] == [7, 9, 11, 13, 16, 21, 26, 31]
+    assert all(sigma(n) >= 2 for n in nonmult if n >= 32)
+    assert all(sigma(n) == 0 for n in range(6, 5001, 6))
+    for n in nonmult:                                                               # Theorem 4.2(c)
+        q, r = divmod(n, 6)
+        k = n // ceil6(n)
+        assert k == 6 - -(-(6 - r) // (q + 1))
+        if k == 5:
+            assert sigma(n) == q + r - 5
+    assert {n: (n // ceil6(n), sigma(n)) for n in (7, 8, 9, 13, 14, 19)} == {
+        7: (3, 1), 8: (4, 0), 9: (4, 1), 13: (4, 1), 14: (4, 2), 19: (4, 3)}
+    assert [n for n in nonmult if n // ceil6(n) < 5] == [7, 8, 9, 13, 14, 19]
+    for n in range(7, 201):                                                         # and the geometry agrees
+        assert pp.min_gap(n) == ceil6(n) and pp.max_size(n) == n // ceil6(n)
+
+
+def test_theorem_5_3_and_corollary_5_4_rigid_values_of_n():
+    expected = {7, 8, 9, 10, 11, 13, 15, 16, 20, 21, 25, 26, 31}
+    for n in range(7, 401):
+        k, m = pp.max_size(n), pp.min_gap(n)
+        unique = pp.count_classes(n, k)[0] == 1
+        assert unique == (n - k * m <= 1), n
+        assert unique == (n % 6 == 0 or n in expected), n
+
+
+def test_proposition_3_3_neighbours_share_a_full_edge_when_6_divides_n():
+    for n in (12, 18, 24, 36, 60):
+        m = n // 6
+        a = list(ps.neighbour(n, 0).exterior.coords)[:-1]
+        b = list(ps.neighbour(n, m).exterior.coords)[:-1]
+        shared = [(p, q) for p in a for q in b if math.dist(p, q) < 1e-9]
+        side = 2 * math.sin(math.pi / n)
+        assert len(shared) == 2, n                                                  # exactly two common vertices ...
+        assert math.dist(shared[0][0], shared[1][0]) == pytest.approx(side, rel=1e-9)   # ... one side apart
+
+
+def test_proposition_7_2_discretised_kissing_number():
+    for n in range(20, 401):
+        assert pp.max_size(n) == 5 + (n % 6 == 0)
+    for m in (10, 50, 100):
+        assert pp.max_size(6 * m) * pp.min_gap(6 * m) / (6 * m) == 1.0
+    ceil6 = lambda n: -(-n // 6)
+    for n in (601, 6001, 60001):                                                    # phi -> 5/6 along n = 6q + 1
+        assert (5 * ceil6(n) / n) == pytest.approx(5 / 6 * (1 + 5 / n))
